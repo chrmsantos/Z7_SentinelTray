@@ -42,6 +42,25 @@ _WHITE = "#e6edf3"  # bright text
 _BTN_DIM = "#21262d"  # dim button bg
 
 
+def _color_hover(hex_color: str) -> str:
+    """Return a slightly brighter version of *hex_color* for mouse-hover feedback."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    r = min(255, r + int((255 - r) * 0.22))
+    g = min(255, g + int((255 - g) * 0.22))
+    b = min(255, b + int((255 - b) * 0.22))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _add_hover(btn: tk.Button, bg: str) -> None:
+    """Bind a subtle brightness-on-hover effect to *btn*."""
+    hover = _color_hover(bg)
+    btn.bind("<Enter>", lambda _e: btn.configure(bg=hover, activebackground=hover))
+    btn.bind("<Leave>", lambda _e: btn.configure(bg=bg, activebackground=bg))
+
+
 # ── Theme palettes ────────────────────────────────────────────────────────────
 _DARK_PALETTE: dict[str, str] = {
     "bg": _BG,
@@ -217,7 +236,7 @@ def prompt_smtp_password_gui(username: str, monitor_index: int) -> str | None:
 
     btn_frame = tk.Frame(dialog, bg=_BG)
     btn_frame.pack(pady=14)
-    tk.Button(
+    _ok_btn = tk.Button(
         btn_frame,
         text="OK",
         command=on_ok,
@@ -226,8 +245,11 @@ def prompt_smtp_password_gui(username: str, monitor_index: int) -> str | None:
         relief="flat",
         padx=20,
         font=("Segoe UI", 9),
-    ).pack(side="left", padx=6)
-    tk.Button(
+        cursor="hand2",
+    )
+    _ok_btn.pack(side="left", padx=6)
+    _add_hover(_ok_btn, _GREEN2)
+    _cancel_btn = tk.Button(
         btn_frame,
         text="Cancelar",
         command=on_cancel,
@@ -236,7 +258,10 @@ def prompt_smtp_password_gui(username: str, monitor_index: int) -> str | None:
         relief="flat",
         padx=10,
         font=("Segoe UI", 9),
-    ).pack(side="left", padx=6)
+        cursor="hand2",
+    )
+    _cancel_btn.pack(side="left", padx=6)
+    _add_hover(_cancel_btn, _BTN_DIM)
 
     entry.bind("<Return>", lambda _e: on_ok())
     dialog.bind("<Escape>", lambda _e: on_cancel())
@@ -432,7 +457,7 @@ class ConfigEditorWindow:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _make_btn(self, parent: tk.Frame, text: str, cmd: Callable[[], None], bg: str) -> tk.Button:
-        return tk.Button(
+        btn = tk.Button(
             parent,
             text=text,
             command=cmd,
@@ -447,6 +472,8 @@ class ConfigEditorWindow:
             pady=5,
             bd=0,
         )
+        _add_hover(btn, bg)
+        return btn
 
     def _restore_defaults(self) -> None:
         import sys
@@ -760,7 +787,7 @@ class EditToAddressesDialog:
         def on_cancel() -> None:
             win.destroy()
 
-        tk.Button(
+        _save_btn = tk.Button(
             footer,
             text="✓  Salvar",
             command=on_save,
@@ -774,8 +801,10 @@ class EditToAddressesDialog:
             padx=14,
             pady=6,
             bd=0,
-        ).pack(side=tk.LEFT, padx=(16, 6))
-        tk.Button(
+        )
+        _save_btn.pack(side=tk.LEFT, padx=(16, 6))
+        _add_hover(_save_btn, _GREEN2)
+        _cancel_btn = tk.Button(
             footer,
             text="Cancelar",
             command=on_cancel,
@@ -789,7 +818,9 @@ class EditToAddressesDialog:
             padx=14,
             pady=6,
             bd=0,
-        ).pack(side=tk.LEFT)
+        )
+        _cancel_btn.pack(side=tk.LEFT)
+        _add_hover(_cancel_btn, _BTN_DIM)
 
         win.bind("<Escape>", lambda _e: on_cancel())
         win.protocol("WM_DELETE_WINDOW", on_cancel)
@@ -1045,7 +1076,7 @@ class SmtpCredentialsDialog:
         def on_cancel() -> None:
             win.destroy()
 
-        tk.Button(
+        _save_btn = tk.Button(
             footer,
             text="✓  Salvar",
             command=on_save,
@@ -1059,8 +1090,10 @@ class SmtpCredentialsDialog:
             padx=14,
             pady=6,
             bd=0,
-        ).pack(side=tk.LEFT, padx=(16, 6))
-        tk.Button(
+        )
+        _save_btn.pack(side=tk.LEFT, padx=(16, 6))
+        _add_hover(_save_btn, _GREEN2)
+        _cancel_btn = tk.Button(
             footer,
             text="Cancelar",
             command=on_cancel,
@@ -1074,7 +1107,9 @@ class SmtpCredentialsDialog:
             padx=14,
             pady=6,
             bd=0,
-        ).pack(side=tk.LEFT)
+        )
+        _cancel_btn.pack(side=tk.LEFT)
+        _add_hover(_cancel_btn, _BTN_DIM)
 
         win.bind("<Escape>", lambda _e: on_cancel())
         win.protocol("WM_DELETE_WINDOW", on_cancel)
@@ -1122,6 +1157,8 @@ class StatusWindow:
         self._status_text: tk.Label | None = None
         self._theme_btn: tk.Button | None = None
         self._uptime_var = tk.StringVar(value="00:00:00")
+        self._pulse_id: str | None = None
+        self._pulse_state: bool = True
         self._build_ui()
         if not self._theme.is_dark:
             _apply_theme_walk(self._root, _DARK_PALETTE, _LIGHT_PALETTE)
@@ -1218,7 +1255,7 @@ class StatusWindow:
         )
         self._status_text.pack(side=tk.LEFT, padx=(8, 0))
 
-        uc, uc_c = self._make_card(row1, "TEMPO ATIVO")
+        uc, uc_c = self._make_card(row1, "⏱  TEMPO ATIVO")
         uc.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
         tk.Label(
             uc_c, textvariable=self._uptime_var, font=("Consolas", 20, "bold"), fg=_TEXT, bg=_CARD
@@ -1227,7 +1264,7 @@ class StatusWindow:
         # ── LEFT: Scan Status ─────────────────────────────────────────────────
         self._kv_section(
             left,
-            "VERIFICAÇÃO",
+            "🔍  VERIFICAÇÃO",
             [
                 ("last_scan", "Última Verificação"),
                 ("next_scan", "Próxima Verificação"),
@@ -1238,7 +1275,7 @@ class StatusWindow:
         # ── LEFT: Alerts ──────────────────────────────────────────────────────
         self._kv_section(
             left,
-            "ALERTAS",
+            "🔔  ALERTAS",
             [
                 ("last_match", "Última Detecção"),
                 ("last_match_at", "Horário da Detecção"),
@@ -1249,7 +1286,7 @@ class StatusWindow:
         # ── RIGHT: Errors ─────────────────────────────────────────────────────
         self._kv_section(
             right,
-            "ERROS",
+            "⚠  ERROS",
             [
                 ("error_count", "Total de Erros"),
                 ("last_error", "Último Erro"),
@@ -1258,7 +1295,7 @@ class StatusWindow:
         )
 
         # ── RIGHT: Email Queue ────────────────────────────────────────────────
-        eq_outer, eq_c = self._make_card(right, "FILA DE E-MAIL")
+        eq_outer, eq_c = self._make_card(right, "📧  FILA DE E-MAIL")
         eq_outer.pack(fill=tk.X, pady=(10, 0))
         for key, label, color in (
             ("q_pending", "Pendente", _AMBER),
@@ -1276,7 +1313,7 @@ class StatusWindow:
             tk.Label(cell, text=label, font=("Segoe UI", 8), fg=_MUTED, bg=_CARD).pack()
 
         # ── RIGHT: Monitors ───────────────────────────────────────────────────
-        mon_outer, mon_c = self._make_card(right, "MONITORES")
+        mon_outer, mon_c = self._make_card(right, "👁  MONITORES")
         mon_outer.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         self._monitors_content = mon_c
 
@@ -1311,16 +1348,25 @@ class StatusWindow:
         self._make_btn(footer, "Sair  ✕", self._on_exit, "#5a1a1a").pack(
             side=tk.RIGHT, padx=(0, 18)
         )
+        tk.Label(
+            footer,
+            text="Dharma, virtude e gratidão.",
+            font=("Segoe UI", 8, "italic"),
+            fg=_MUTED,
+            bg=_SURFACE,
+        ).pack(side=tk.RIGHT, padx=(0, 14))
 
     def _make_card(self, parent: tk.Widget, title: str) -> tuple[tk.Frame, tk.Frame]:
         """Create a styled card. Returns (outer, content). Caller packs outer."""
         outer = tk.Frame(parent, bg=_BORDER, padx=1, pady=1)
         inner = tk.Frame(outer, bg=_CARD)
         inner.pack(fill=tk.BOTH, expand=True)
+        header_row = tk.Frame(inner, bg=_SURFACE)
+        header_row.pack(fill=tk.X)
         tk.Label(
-            inner, text=title, font=("Segoe UI", 7, "bold"), fg=_GREEN, bg=_CARD, anchor="w"
-        ).pack(fill=tk.X, padx=12, pady=(8, 2))
-        tk.Frame(inner, bg=_BORDER, height=1).pack(fill=tk.X, padx=12)
+            header_row, text=title, font=("Segoe UI", 8, "bold"), fg=_GREEN, bg=_SURFACE, anchor="w"
+        ).pack(fill=tk.X, padx=10, pady=(6, 5))
+        tk.Frame(inner, bg=_BORDER, height=1).pack(fill=tk.X)
         content = tk.Frame(inner, bg=_CARD)
         content.pack(fill=tk.BOTH, expand=True, padx=12, pady=(6, 10))
         return outer, content
@@ -1361,7 +1407,7 @@ class StatusWindow:
             self._value_labels[key] = lbl
 
     def _make_btn(self, parent: tk.Frame, text: str, cmd: Callable[[], None], bg: str) -> tk.Button:
-        return tk.Button(
+        btn = tk.Button(
             parent,
             text=text,
             command=cmd,
@@ -1376,6 +1422,30 @@ class StatusWindow:
             pady=6,
             bd=0,
         )
+        _add_hover(btn, bg)
+        return btn
+
+    # ── Pulse animation ───────────────────────────────────────────────────────
+
+    def _start_pulse(self) -> None:
+        if self._pulse_id is None:
+            self._pulse_state = True
+            self._do_pulse()
+
+    def _stop_pulse(self) -> None:
+        if self._pulse_id:
+            with contextlib.suppress(Exception):
+                self._root.after_cancel(self._pulse_id)
+            self._pulse_id = None
+
+    def _do_pulse(self) -> None:
+        self._pulse_id = None
+        if self._status_dot is None:
+            return
+        p = self._theme.palette
+        self._status_dot.configure(fg=p["green"] if self._pulse_state else p["green2"])
+        self._pulse_state = not self._pulse_state
+        self._pulse_id = self._root.after(600, self._do_pulse)
 
     def _draw_eye(self, canvas: tk.Canvas, size: int) -> None:
         cx, cy = size // 2, size // 2
@@ -1417,6 +1487,7 @@ class StatusWindow:
             with contextlib.suppress(Exception):
                 self._root.after_cancel(self._after_id)
             self._after_id = None
+        self._stop_pulse()
 
     # ── Refresh loop ──────────────────────────────────────────────────────────
 
@@ -1443,9 +1514,10 @@ class StatusWindow:
         if self._status_dot is None or self._status_text is None:
             return
         if snap.running:
-            self._status_dot.configure(fg=self._theme.palette["green"])
+            self._start_pulse()
             self._status_text.configure(text="EXECUTANDO", fg=self._theme.palette["green"])
         else:
+            self._stop_pulse()
             self._status_dot.configure(fg=self._theme.palette["red"])
             self._status_text.configure(text="PARADO", fg=self._theme.palette["red"])
 
