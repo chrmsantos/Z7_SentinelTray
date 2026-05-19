@@ -1678,7 +1678,8 @@ def _start_notifier(
     t = Thread(
         target=notifier.run_loop,
         args=(stop_event, manual_scan_event, scan_complete_event, test_message_event),
-        daemon=True,
+        daemon=False,
+        name="monitor-loop",
     )
     t.start()
     return t
@@ -1841,6 +1842,8 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
         LOGGER.exception("GUI mainloop error", extra={"category": "startup"})
     finally:
         stop_holder[0].set()
+        with contextlib.suppress(Exception):
+            thread_holder[0].join(timeout=15)
         # Destroy Tk explicitly here — before Python's interpreter-level shutdown
         # — so Tcl's finalizer runs while the main thread is in a clean state.
         # Leaving root alive causes a hang when Python's GC calls root.__del__

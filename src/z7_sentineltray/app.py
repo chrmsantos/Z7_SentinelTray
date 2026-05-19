@@ -208,23 +208,26 @@ def _check_smtp_health(config: AppConfig) -> None:
         return
 
     def _check() -> None:
-        for monitor_cfg in config.monitors:
-            email = monitor_cfg.email
-            host = email.smtp_host
-            port = email.smtp_port
-            if not host or not port:
-                continue
-            try:
-                with socket.create_connection((host, int(port)), timeout=10):
-                    pass
-            except OSError as exc:
-                LOGGER.warning(
-                    "SMTP healthcheck failed for %s:%s: %s",
-                    host,
-                    port,
-                    exc,
-                    extra={"category": "send"},
-                )
+        try:
+            for monitor_cfg in config.monitors:
+                email = monitor_cfg.email
+                host = email.smtp_host
+                port = email.smtp_port
+                if not host or not port:
+                    continue
+                try:
+                    with socket.create_connection((host, int(port)), timeout=10):
+                        pass
+                except OSError as exc:
+                    LOGGER.warning(
+                        "SMTP healthcheck failed for %s:%s: %s",
+                        host,
+                        port,
+                        exc,
+                        extra={"category": "send"},
+                    )
+        except Exception:
+            LOGGER.debug("SMTP healthcheck thread failed unexpectedly", exc_info=True)
 
     t = Thread(target=_check, daemon=True, name="smtp-health-check")
     t.start()
@@ -264,9 +267,15 @@ class Notifier:
             "oldest_age_seconds": 0,
         }
         self._sender: EmailSender | None = None
+        self._commit_hash_ready: Event = Event()
 
         def _fetch_commit_hash() -> None:
-            self._commit_hash = _get_commit_hash()
+            try:
+                self._commit_hash = _get_commit_hash()
+            except Exception:
+                LOGGER.debug("Failed to fetch commit hash", exc_info=True)
+            finally:
+                self._commit_hash_ready.set()
 
         Thread(target=_fetch_commit_hash, daemon=True, name="commit-hash").start()
         _check_smtp_health(self.config)
@@ -908,6 +917,7 @@ class Notifier:
             scan_complete_event: Optional event set after each scan completes.
             test_message_event: Optional event to trigger a test email send.
         """
+        self._commit_hash_ready.wait(timeout=2.0)
         setup_logging(
             self.config.log_file,
             log_level=self.config.log_level,
