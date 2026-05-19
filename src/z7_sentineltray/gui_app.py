@@ -12,7 +12,7 @@ import webbrowser
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from tkinter import messagebox
 
 from .app import Notifier
@@ -1666,6 +1666,44 @@ def _fmt_next_scan(last_scan: str, poll_interval_seconds: int) -> str:
         return f"em {m}m {s:02d}s" if m else f"em {s}s"
 
 
+class _NotifierHandle:
+    """Thread-safe composite holder for the active notifier's lifecycle state.
+
+    A :class:`threading.Lock` ensures that :meth:`is_dead` and :meth:`replace`
+    are atomic with respect to each other, guarding against the TOCTOU window
+    where the watchdog thread could observe a dead thread paired with an unset
+    stop event just as ``_reload_notifier`` is swapping in a fresh notifier.
+    """
+
+    def __init__(self, *, stop: Event, thread: Thread, config: AppConfig) -> None:
+        self._lock = Lock()
+        self.stop = stop
+        self.thread = thread
+        self.config = config
+
+    def replace(
+        self,
+        *,
+        new_stop: Event,
+        new_thread: Thread,
+        new_config: AppConfig,
+    ) -> None:
+        """Atomically swap all three fields.
+
+        Assigns ``thread`` before ``stop`` so the watchdog never observes the
+        contradictory state of a dead thread paired with an unset stop event.
+        """
+        with self._lock:
+            self.thread = new_thread  # live thread first — watchdog short-circuits on is_alive
+            self.stop = new_stop
+            self.config = new_config
+
+    def is_dead(self) -> bool:
+        """Return True only if the thread exited and its stop event is not set."""
+        with self._lock:
+            return not self.thread.is_alive() and not self.stop.is_set()
+
+
 def _start_notifier(
     config: AppConfig,
     status: StatusStore,
@@ -1698,18 +1736,20 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     test_message_event = Event()
     exit_event = Event()
 
-    stop_holder: list[Event] = [Event()]
-    thread_holder: list[Thread] = [
-        _start_notifier(
-            config,
-            status,
-            stop_holder[0],
-            manual_scan_event,
-            scan_complete_event,
-            test_message_event,
-        )
-    ]
-    config_holder: list[AppConfig] = [config]
+    _initial_stop = Event()
+    _initial_thread = _start_notifier(
+        config,
+        status,
+        _initial_stop,
+        manual_scan_event,
+        scan_complete_event,
+        test_message_event,
+    )
+    handle = _NotifierHandle(
+        stop=_initial_stop,
+        thread=_initial_thread,
+        config=config,
+    )
 
     # ── Tk root ───────────────────────────────────────────────────────────────
     root = tk.Tk()
@@ -1720,14 +1760,16 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
 
     # ── Config editor ─────────────────────────────────────────────────────────
     def _reload_notifier(new_cfg: AppConfig) -> None:
-        old_stop = stop_holder[0]
-        old_stop.set()
+        handle.stop.set()
         with contextlib.suppress(Exception):
-            thread_holder[0].join(timeout=5)
+            handle.thread.join(timeout=5)
         new_stop = Event()
-        stop_holder[0] = new_stop
+        # Clear shared events so the new notifier starts with a clean state.
+        manual_scan_event.clear()
+        scan_complete_event.clear()
+        test_message_event.clear()
         status.set_last_error("")
-        thread_holder[0] = _start_notifier(
+        new_thread = _start_notifier(
             new_cfg,
             status,
             new_stop,
@@ -1735,13 +1777,13 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
             scan_complete_event,
             test_message_event,
         )
-        config_holder[0] = new_cfg
+        handle.replace(new_stop=new_stop, new_thread=new_thread, new_config=new_cfg)
 
     cfg_path = get_user_data_dir() / "config.local.yaml"
     recipients_editor = EditToAddressesDialog(
         root,
         cfg_path=cfg_path,
-        get_config=lambda: config_holder[0],
+        get_config=lambda: handle.config,
         on_saved=_reload_notifier,
         theme_state=theme,
     )
@@ -1752,7 +1794,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     smtp_credentials_dialog = SmtpCredentialsDialog(
         root,
         cfg_path=cfg_path,
-        get_config=lambda: config_holder[0],
+        get_config=lambda: handle.config,
         on_saved=_reload_notifier,
         theme_state=theme,
     )
@@ -1776,7 +1818,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
         root,
         status,
         config,
-        get_config=lambda: config_holder[0],
+        get_config=lambda: handle.config,
         on_manual_scan=manual_scan_event.set,
         on_open_config=open_config,
         on_exit=exit_event.set,
@@ -1800,12 +1842,12 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     def _watchdog() -> None:
         def _maybe_reload() -> None:
             # Re-check under the main thread to avoid racing with GUI-triggered reloads.
-            if not thread_holder[0].is_alive() and not stop_holder[0].is_set():
-                _reload_notifier(config_holder[0])
+            if handle.is_dead():
+                _reload_notifier(handle.config)
 
         while not exit_event.wait(5):
             # Restart notifier if it died unexpectedly.
-            if not thread_holder[0].is_alive() and not stop_holder[0].is_set():
+            if handle.is_dead():
                 LOGGER.warning("Notifier died; restarting", extra={"category": "startup"})
                 root.after(0, _maybe_reload)
             # Restart tray icon if its run loop exited unexpectedly (e.g. after
@@ -1827,7 +1869,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     # ── Exit poller ───────────────────────────────────────────────────────────
     def _check_exit() -> None:
         if exit_event.is_set():
-            stop_holder[0].set()
+            handle.stop.set()
             with contextlib.suppress(Exception):
                 root.quit()
             return
@@ -1841,9 +1883,9 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     except Exception:
         LOGGER.exception("GUI mainloop error", extra={"category": "startup"})
     finally:
-        stop_holder[0].set()
+        handle.stop.set()
         with contextlib.suppress(Exception):
-            thread_holder[0].join(timeout=15)
+            handle.thread.join(timeout=15)
         # Destroy Tk explicitly here — before Python's interpreter-level shutdown
         # — so Tcl's finalizer runs while the main thread is in a clean state.
         # Leaving root alive causes a hang when Python's GC calls root.__del__
