@@ -7,6 +7,31 @@
 			"command": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --distpath dist --workpath build\\pyinstaller Z7_SentinelTray.spec",
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Tag and push v6.0.1-rc2",
+			"type": "shell",
+			"command": "git -C \"C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\" tag -a v6.0.1-rc2 -m \"fix: replace background-thread Tkinter splash to prevent Tcl_AsyncDelete crash\" ; git -C \"C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\" push origin v6.0.1-rc2"
+		},
+		{
+			"label": "Create tag v6.0.1-rc2",
+			"type": "shell",
+			"command": "git -C \"C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\" tag v6.0.1-rc2"
+		},
+		{
+			"label": "Push tag v6.0.1-rc2",
+			"type": "shell",
+			"command": "git -C \"C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\" push origin v6.0.1-rc2"
+		},
+		{
+			"label": "Create GitHub release v6.0.1-rc2",
+			"type": "shell",
+			"command": "gh release create v6.0.1-rc2 \"C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\dist\\Z7_SentinelTray.exe\" --repo chrmsantos/Z7_SentinelTray --title \"v6.0.1-rc2\" --prerelease --notes \"## Release Candidate 2\\n\\n### Correção de crash no startup\\n- `splash.py`: splash screen movido para a thread principal — elimina o panic fatal `Tcl_AsyncDelete: async handler deleted by the wrong thread` causado pela inicialização do interpretador Tcl/Tk em thread de background\\n- A janela de splash agora usa `update()` em vez de `mainloop()`, permanecendo visível durante o carregamento sem bloquear a thread principal\""
+		},
+		{
+			"label": "Publish GitHub release v6.0.1-rc2",
+			"type": "shell",
+			"command": "gh release create v6.0.1-rc2 \"C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\dist\\Z7_SentinelTray.exe\" --repo chrmsantos/Z7_SentinelTray --title \"v6.0.1-rc2\" --prerelease --notes-file \"C:\\Users\\csantos\\AppData\\Local\\Temp\\rc2_notes.md\""
 		}
 	]
 }
