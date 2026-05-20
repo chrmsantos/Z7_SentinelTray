@@ -761,6 +761,9 @@ class Notifier:
         uptime_seconds = int((datetime.now(UTC) - self._started_at).total_seconds())
         self.status.set_uptime_seconds(uptime_seconds)
         snapshot = self.status.snapshot()
+        if self.config.healthcheck_send_on_error_only and not snapshot.last_error:
+            self.status.set_last_healthcheck(_now_iso())
+            return
         try:
             sent_any = False
             sent_direct = False

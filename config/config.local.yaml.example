@@ -80,6 +80,12 @@ poll_interval_seconds: 30
 # Valor padrão: 1800 (30 minutos).
 healthcheck_interval_seconds: 1800
 
+# Controla se o e-mail de healthcheck é enviado apenas em caso de erro ativo.
+# Quando true (padrão), o e-mail de status só é enviado se houver um erro pendente,
+# evitando notificações periódicas desnecessárias durante operação normal.
+# Defina como false para receber confirmações periódicas mesmo sem erros.
+healthcheck_send_on_error_only: true
+
 # Tempo base (em segundos) para o backoff exponencial em caso de erros gerais.
 # Na primeira falha, o sistema aguarda esse valor antes de tentar novamente.
 # A cada falha consecutiva, o tempo dobra até atingir error_backoff_max_seconds.

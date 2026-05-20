@@ -39,6 +39,7 @@ _DEFAULT_CONFIG_VALUES: dict[str, Any] = {
     "config_version": CURRENT_CONFIG_VERSION,
     "pause_on_user_active": True,
     "pause_idle_threshold_seconds": 180,
+    "healthcheck_send_on_error_only": True,
 }
 
 
@@ -180,6 +181,7 @@ class AppConfig:
     email_queue_retry_base_seconds: int = 30
     pause_on_user_active: bool = True
     pause_idle_threshold_seconds: int = 180
+    healthcheck_send_on_error_only: bool = True
     monitors: list[MonitorConfig] = field(default_factory=lambda: cast(list[MonitorConfig], []))
     config_version: int = 1
 
@@ -392,6 +394,7 @@ def _build_config(data: dict[str, Any]) -> AppConfig:  # noqa: C901
         email_queue_retry_base_seconds=int(data.get("email_queue_retry_base_seconds", 30)),
         pause_on_user_active=bool(data.get("pause_on_user_active", True)),
         pause_idle_threshold_seconds=int(data.get("pause_idle_threshold_seconds", 180)),
+        healthcheck_send_on_error_only=bool(data.get("healthcheck_send_on_error_only", True)),
         monitors=monitors,
         config_version=int(data.get("config_version", 1)),
     )
