@@ -37,3 +37,11 @@ def test_status_store_snapshot() -> None:
     assert "Texto monitorado: ALERT" in text
     assert "Próxima verificação: 19-01-2026 - 23:01" in text
     assert "Última detecção: 19-01-2026 - 23:00" in text
+
+
+def test_status_store_active_windows() -> None:
+    store = StatusStore()
+    assert store.snapshot().active_windows == []
+    store.set_active_windows(["Win1", "Win2"])
+    snapshot = store.snapshot()
+    assert snapshot.active_windows == ["Win1", "Win2"]

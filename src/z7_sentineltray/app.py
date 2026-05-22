@@ -487,6 +487,32 @@ class Notifier:
 
     def _scan_once_impl(self) -> None:  # noqa: C901
         self.status.set_last_scan(_now_iso())
+        import sys
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                active_titles = []
+
+                @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+                def enum_proc(hwnd, lParam):
+                    if user32.IsWindowVisible(hwnd):
+                        length = user32.GetWindowTextLengthW(hwnd)
+                        if length > 0:
+                            buf = ctypes.create_unicode_buffer(length + 1)
+                            user32.GetWindowTextW(hwnd, buf, length + 1)
+                            title = buf.value
+                            if title and title != "Program Manager":
+                                active_titles.append(title)
+                    return True
+
+                user32.EnumWindows(enum_proc, 0)
+                self.status.set_active_windows(active_titles)
+            except Exception as exc:
+                LOGGER.debug("Failed to list active windows during scan: %s", exc)
+        else:
+            self.status.set_active_windows(["Mock Window 1", "Mock Window 2"])
+
         any_match = False
         self._last_scan_error = False
         self._last_scan_had_match = False

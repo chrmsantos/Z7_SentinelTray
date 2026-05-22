@@ -1191,6 +1191,32 @@ class StatusWindow:
         self._uptime_var = tk.StringVar(value="00:00:00")
         self._pulse_id: str | None = None
         self._pulse_state: bool = True
+
+        # Initial active windows capture
+        import sys
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                active_titles = []
+                @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+                def enum_proc(hwnd, lParam):
+                    if user32.IsWindowVisible(hwnd):
+                        length = user32.GetWindowTextLengthW(hwnd)
+                        if length > 0:
+                            buf = ctypes.create_unicode_buffer(length + 1)
+                            user32.GetWindowTextW(hwnd, buf, length + 1)
+                            title = buf.value
+                            if title and title != "Program Manager":
+                                active_titles.append(title)
+                    return True
+                user32.EnumWindows(enum_proc, 0)
+                self._status.set_active_windows(active_titles)
+            except Exception:
+                pass
+        else:
+            self._status.set_active_windows(["Mock Window A", "Mock Window B"])
+
         self._build_ui()
         if not self._theme.is_dark:
             _apply_theme_walk(self._root, _DARK_PALETTE, _LIGHT_PALETTE)
@@ -1314,6 +1340,41 @@ class StatusWindow:
                 ("last_send", "Último Alerta Enviado"),
             ],
         )
+
+        # ── LEFT: Active Windows ──────────────────────────────────────────────
+        win_outer, win_c = self._make_card(left, "🪟  JANELAS ATIVAS")
+        win_outer.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
+        # Scrollable container using Canvas and Scrollbar
+        win_container = tk.Frame(win_c, bg=_CARD)
+        win_container.pack(fill=tk.BOTH, expand=True)
+
+        self._win_canvas = tk.Canvas(win_container, bg=_CARD, highlightthickness=0)
+        win_scrollbar = tk.Scrollbar(win_container, orient=tk.VERTICAL, command=self._win_canvas.yview)
+        self._win_scrollable = tk.Frame(self._win_canvas, bg=_CARD)
+
+        self._win_scrollable.bind(
+            "<Configure>",
+            lambda e: self._win_canvas.configure(
+                scrollregion=self._win_canvas.bbox("all")
+            )
+        )
+
+        self._win_canvas_window = self._win_canvas.create_window((0, 0), window=self._win_scrollable, anchor="nw")
+
+        self._win_canvas.bind(
+            "<Configure>",
+            lambda e: self._win_canvas.itemconfigure(self._win_canvas_window, width=e.width)
+        )
+
+        self._win_canvas.configure(yscrollcommand=win_scrollbar.set)
+        self._win_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        win_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def _on_mousewheel(event):
+            self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        self._win_canvas.bind("<MouseWheel>", _on_mousewheel)
+        self._win_scrollable.bind("<MouseWheel>", _on_mousewheel)
 
         # ── RIGHT: Errors ─────────────────────────────────────────────────────
         self._kv_section(
@@ -1644,6 +1705,9 @@ class StatusWindow:
         # ── Monitors ──────────────────────────────────────────────────────────
         self._update_monitors(snap, cfg)
 
+        # ── Active Windows ────────────────────────────────────────────────────
+        self._update_active_windows(snap)
+
     def _set(self, key: str, value: str) -> None:
         var = self._vars.get(key)
         if var is not None:
@@ -1700,6 +1764,58 @@ class StatusWindow:
                     fg=p["red"] if breaker else p["amber"],
                     bg=p["card"],
                 ).pack(side=tk.LEFT)
+
+    def _update_active_windows(self, snap: object) -> None:
+        if not hasattr(self, "_win_scrollable") or self._win_scrollable is None:
+            return
+        for w in self._win_scrollable.winfo_children():
+            w.destroy()
+
+        p = self._theme.palette
+        active_windows = getattr(snap, "active_windows", [])
+        if not active_windows:
+            lbl = tk.Label(
+                self._win_scrollable,
+                text="Nenhuma janela detectada.",
+                font=("Segoe UI", 9),
+                fg=p["muted"],
+                bg=p["card"],
+                anchor="w",
+            )
+            lbl.pack(fill=tk.X, pady=2, padx=4)
+
+            def _on_scroll(event):
+                self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            lbl.bind("<MouseWheel>", _on_scroll)
+            return
+
+        def _on_scroll(event):
+            self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        for idx, title in enumerate(active_windows, start=1):
+            row = tk.Frame(self._win_scrollable, bg=p["card"])
+            row.pack(fill=tk.X, pady=1)
+            row.bind("<MouseWheel>", _on_scroll)
+
+            dot = tk.Label(row, text="•", font=("Segoe UI", 10), fg=p["teal"], bg=p["card"])
+            dot.pack(side=tk.LEFT, padx=(4, 6))
+            dot.bind("<MouseWheel>", _on_scroll)
+
+            display_title = title
+            if len(display_title) > 60:
+                display_title = display_title[:57] + "..."
+
+            lbl = tk.Label(
+                row,
+                text=display_title,
+                font=("Segoe UI", 9),
+                fg=p["text"],
+                bg=p["card"],
+                anchor="w",
+                justify=tk.LEFT,
+            )
+            lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            lbl.bind("<MouseWheel>", _on_scroll)
 
     def _trigger_scan(self) -> None:
         self._on_manual_scan()
