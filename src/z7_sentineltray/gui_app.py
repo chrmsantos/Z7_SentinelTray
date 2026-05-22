@@ -43,22 +43,46 @@ _BTN_DIM = "#21262d"  # dim button bg
 
 
 def _color_hover(hex_color: str) -> str:
-    """Return a slightly brighter version of *hex_color* for mouse-hover feedback."""
+    """Return a slightly modified version of *hex_color* for mouse-hover feedback.
+    Brightens dark colors and darkens light colors.
+    """
     h = hex_color.lstrip("#")
     if len(h) != 6:
         return hex_color
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    r = min(255, r + int((255 - r) * 0.22))
-    g = min(255, g + int((255 - g) * 0.22))
-    b = min(255, b + int((255 - b) * 0.22))
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    except ValueError:
+        return hex_color
+
+    # Calculate relative luminance to detect light vs dark colors
+    luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    if luminance > 160:  # It's a light color, let's darken it for hover
+        r = max(0, int(r * 0.9))
+        g = max(0, int(g * 0.9))
+        b = max(0, int(b * 0.9))
+    else:  # It's a dark color, let's brighten it for hover
+        r = min(255, r + int((255 - r) * 0.22))
+        g = min(255, g + int((255 - g) * 0.22))
+        b = min(255, b + int((255 - b) * 0.22))
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def _add_hover(btn: tk.Button, bg: str) -> None:
-    """Bind a subtle brightness-on-hover effect to *btn*."""
-    hover = _color_hover(bg)
-    btn.bind("<Enter>", lambda _e: btn.configure(bg=hover, activebackground=hover))
-    btn.bind("<Leave>", lambda _e: btn.configure(bg=bg, activebackground=bg))
+    """Bind a dynamic brightness/darkness-on-hover effect to *btn*."""
+    btn._normal_bg = bg
+
+    def on_enter(_e: tk.Event) -> None:
+        current_bg = getattr(btn, "_normal_bg", btn.cget("bg"))
+        hover = _color_hover(current_bg)
+        btn.configure(bg=hover, activebackground=hover)
+
+    def on_leave(_e: tk.Event) -> None:
+        normal_bg = getattr(btn, "_normal_bg", None)
+        if normal_bg:
+            btn.configure(bg=normal_bg, activebackground=normal_bg)
+
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)
 
 
 # ── Theme palettes ────────────────────────────────────────────────────────────
@@ -78,6 +102,7 @@ _DARK_PALETTE: dict[str, str] = {
     "btn_dim": _BTN_DIM,
     "exit_btn": "#5a1a1a",
     "select_bg": "#264f78",
+    "teal": _TEAL,
 }
 
 _LIGHT_PALETTE: dict[str, str] = {
@@ -96,6 +121,7 @@ _LIGHT_PALETTE: dict[str, str] = {
     "btn_dim": "#e6eaef",
     "exit_btn": "#ffd8d8",
     "select_bg": "#b6d3fb",
+    "teal": "#d0f4f7",
 }
 
 
@@ -112,6 +138,10 @@ def _apply_theme_walk(root: tk.Widget, old_pal: dict, new_pal: dict) -> None:
     )
 
     def _remap(w: tk.Widget) -> None:
+        normal_bg = getattr(w, "_normal_bg", None)
+        if normal_bg in color_map:
+            w._normal_bg = color_map[normal_bg]
+
         for opt in _OPTS:
             try:
                 cur = w.cget(opt)
@@ -436,10 +466,7 @@ class ConfigEditorWindow:
         self._make_btn(
             footer, "↺  Restaurar valores padrão", self._restore_defaults, _BTN_DIM
         ).pack(side=tk.LEFT, padx=(0, 6))
-        if self._on_edit_recipients is not None:
-            self._make_btn(footer, "✉  Destinatários", self._on_edit_recipients, _TEAL).pack(
-                side=tk.LEFT, padx=(0, 6)
-            )
+        # Moved to main window for quicker access and better visibility
         if self._on_edit_smtp_credentials is not None:
             self._make_btn(
                 footer, "🔑  Credenciais SMTP", self._on_edit_smtp_credentials, _AMBER
@@ -1140,6 +1167,8 @@ class StatusWindow:
         on_open_config: Callable[[], None],
         on_exit: Callable[[], None],
         theme_state: _ThemeState | None = None,
+        pause_event: Event | None = None,
+        on_edit_recipients: Callable[[], None] | None = None,
     ) -> None:
         self._root = root
         self._status = status
@@ -1148,6 +1177,9 @@ class StatusWindow:
         self._on_open_config = on_open_config
         self._on_exit = on_exit
         self._theme = theme_state or _ThemeState()
+        self._pause_event = pause_event
+        self._on_edit_recipients = on_edit_recipients
+        self._pause_btn: tk.Button | None = None
         self._visible = False
         self._after_id: str | None = None
         self._vars: dict[str, tk.StringVar] = {}
@@ -1325,6 +1357,12 @@ class StatusWindow:
         self._make_btn(footer, "⟳  Verificar Agora", self._trigger_scan, _BLUE).pack(
             side=tk.LEFT, padx=(18, 6)
         )
+        self._pause_btn = self._make_btn(footer, "⏸  Pausar", self._toggle_pause, _AMBER)
+        self._pause_btn.pack(side=tk.LEFT, padx=(0, 6))
+        if self._on_edit_recipients is not None:
+            self._make_btn(footer, "✉  Destinatários", self._on_edit_recipients, _TEAL).pack(
+                side=tk.LEFT, padx=(0, 6)
+            )
         self._make_btn(footer, "⚙  Avançado", self._on_open_config, _BTN_DIM).pack(
             side=tk.LEFT, padx=(0, 6)
         )
@@ -1513,13 +1551,33 @@ class StatusWindow:
         # ── Status indicator ──────────────────────────────────────────────────
         if self._status_dot is None or self._status_text is None:
             return
-        if snap.running:
+        if snap.paused:
+            self._stop_pulse()
+            self._status_dot.configure(fg=self._theme.palette["amber"])
+            self._status_text.configure(text="PAUSADO", fg=self._theme.palette["amber"])
+        elif snap.running:
             self._start_pulse()
             self._status_text.configure(text="EXECUTANDO", fg=self._theme.palette["green"])
         else:
             self._stop_pulse()
             self._status_dot.configure(fg=self._theme.palette["red"])
             self._status_text.configure(text="PARADO", fg=self._theme.palette["red"])
+
+        # ── Pause button state ────────────────────────────────────────────────
+        if self._pause_btn is not None and self._pause_event is not None:
+            p = self._theme.palette
+            if self._pause_event.is_set():
+                btn_text = "▶  Continuar"
+                btn_bg = p["green"]
+            else:
+                btn_text = "⏸  Pausar"
+                btn_bg = p["amber"]
+            self._pause_btn.configure(
+                text=btn_text,
+                bg=btn_bg,
+                activebackground=btn_bg,
+            )
+            _add_hover(self._pause_btn, btn_bg)
 
         # ── Uptime ────────────────────────────────────────────────────────────
         if snap.started_at is not None:
@@ -1634,6 +1692,15 @@ class StatusWindow:
 
     def _trigger_scan(self) -> None:
         self._on_manual_scan()
+
+    def _toggle_pause(self) -> None:
+        if self._pause_event is None:
+            return
+        if self._pause_event.is_set():
+            self._pause_event.clear()
+        else:
+            self._pause_event.set()
+        self._update_ui()
 
     def _toggle_theme(self) -> None:
         self._theme.toggle(self._root)
@@ -1783,11 +1850,12 @@ def _start_notifier(
     manual_scan_event: Event,
     scan_complete_event: Event | None = None,
     test_message_event: Event | None = None,
+    pause_event: Event | None = None,
 ) -> Thread:
     notifier = Notifier(config=config, status=status)
     t = Thread(
         target=notifier.run_loop,
-        args=(stop_event, manual_scan_event, scan_complete_event, test_message_event),
+        args=(stop_event, manual_scan_event, scan_complete_event, test_message_event, pause_event),
         daemon=False,
         name="monitor-loop",
     )
@@ -1807,6 +1875,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     scan_complete_event = Event()
     test_message_event = Event()
     exit_event = Event()
+    pause_event = Event()
 
     _initial_stop = Event()
     _initial_thread = _start_notifier(
@@ -1816,6 +1885,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
         manual_scan_event,
         scan_complete_event,
         test_message_event,
+        pause_event,
     )
     handle = _NotifierHandle(
         stop=_initial_stop,
@@ -1848,6 +1918,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
             manual_scan_event,
             scan_complete_event,
             test_message_event,
+            pause_event,
         )
         handle.replace(new_stop=new_stop, new_thread=new_thread, new_config=new_cfg)
 
@@ -1895,6 +1966,8 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
         on_open_config=open_config,
         on_exit=exit_event.set,
         theme_state=theme,
+        pause_event=pause_event,
+        on_edit_recipients=open_recipients,
     )
 
     # ── Tray icon ─────────────────────────────────────────────────────────────

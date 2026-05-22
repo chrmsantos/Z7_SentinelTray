@@ -15,6 +15,7 @@ class StatusSnapshot:
     """
 
     running: bool
+    paused: bool
     last_scan: str
     last_scan_result: str
     last_match: str
@@ -42,6 +43,7 @@ class StatusStore:
     def __init__(self) -> None:
         self._lock = Lock()
         self._running = False
+        self._paused = False
         self._last_scan = ""
         self._last_scan_result = ""
         self._last_match = ""
@@ -66,6 +68,11 @@ class StatusStore:
         """Set the *running* flag."""
         with self._lock:
             self._running = value
+
+    def set_paused(self, value: bool) -> None:
+        """Set the *paused* flag."""
+        with self._lock:
+            self._paused = value
 
     def set_last_scan(self, value: str) -> None:
         """Record the ISO timestamp of the most recent scan."""
@@ -136,6 +143,7 @@ class StatusStore:
             )
             return StatusSnapshot(
                 running=self._running,
+                paused=self._paused,
                 last_scan=self._last_scan,
                 last_scan_result=self._last_scan_result,
                 last_match=self._last_match,

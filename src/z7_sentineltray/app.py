@@ -911,6 +911,7 @@ class Notifier:
         manual_scan_event: Event | None = None,
         scan_complete_event: Event | None = None,
         test_message_event: Event | None = None,
+        pause_event: Event | None = None,
     ) -> None:
         """Run the main monitoring loop until *stop_event* is set.
 
@@ -958,6 +959,8 @@ class Notifier:
                 while not stop_event.is_set():
                     if manual_scan_event is not None and manual_scan_event.is_set():
                         return True
+                    if pause_event is not None and pause_event.is_set():
+                        return True
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         return False
@@ -965,6 +968,16 @@ class Notifier:
                 return False
 
             while not stop_event.is_set():
+                if pause_event is not None and pause_event.is_set():
+                    self.status.set_paused(True)
+                    self.status.set_last_scan_result("PAUSADO")
+                    self._update_telemetry()
+                    while pause_event.is_set() and not stop_event.is_set():
+                        stop_event.wait(0.5)
+                    self.status.set_paused(False)
+                    if stop_event.is_set():
+                        break
+
                 loop_started = time.perf_counter()
                 try:
                     is_manual = manual_scan_event is not None and manual_scan_event.is_set()

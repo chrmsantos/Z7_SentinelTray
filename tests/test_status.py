@@ -4,6 +4,7 @@ from z7_sentineltray.status import StatusStore, format_status
 def test_status_store_snapshot() -> None:
     store = StatusStore()
     store.set_running(True)
+    store.set_paused(True)
     store.set_last_scan("2026-01-19T23:00:00-03:00")
     store.set_last_match("2026-01-19T23:00:00-03:00")
     store.set_last_send("2026-01-19T23:00:00-03:00")
@@ -15,6 +16,7 @@ def test_status_store_snapshot() -> None:
 
     snapshot = store.snapshot()
     assert snapshot.running is True
+    assert snapshot.paused is True
     assert snapshot.last_scan == "2026-01-19T23:00:00-03:00"
     assert snapshot.last_match == "2026-01-19T23:00:00-03:00"
     assert snapshot.last_send == "2026-01-19T23:00:00-03:00"
