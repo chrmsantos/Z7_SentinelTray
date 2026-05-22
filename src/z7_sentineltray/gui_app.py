@@ -1285,6 +1285,63 @@ class StatusWindow:
 
         tk.Frame(r, bg=_BORDER, height=1).pack(fill=tk.X)
 
+        # ── Footer ────────────────────────────────────────────────────────────
+        footer_sep = tk.Frame(r, bg=_BORDER, height=1)
+        footer_sep.pack(side=tk.BOTTOM, fill=tk.X)
+        footer = tk.Frame(r, bg=_SURFACE, pady=8)
+        footer.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Upper row: Buttons
+        btn_row = tk.Frame(footer, bg=_SURFACE)
+        btn_row.pack(fill=tk.X, padx=18, pady=(2, 4))
+
+        self._make_btn(btn_row, "⟳  Verificar Agora", self._trigger_scan, _BLUE).pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        self._pause_btn = self._make_btn(btn_row, "⏸  Pausar", self._toggle_pause, _AMBER)
+        self._pause_btn.pack(side=tk.LEFT, padx=(0, 6))
+        if self._on_edit_recipients is not None:
+            self._make_btn(btn_row, "✉  Destinatários", self._on_edit_recipients, _TEAL).pack(
+                side=tk.LEFT, padx=(0, 6)
+            )
+        self._make_btn(btn_row, "⚙  Avançado", self._on_open_config, _BTN_DIM).pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        self._make_btn(
+            btn_row, "↗  Repositório", lambda: webbrowser.open(_PROJECT_REPO_URL), _BTN_DIM
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        theme_label = "☀  Tema Claro" if self._theme.is_dark else "🌙  Tema Escuro"
+        self._theme_btn = self._make_btn(btn_row, theme_label, self._toggle_theme, _BTN_DIM)
+        self._theme_btn.pack(side=tk.LEFT)
+
+        self._make_btn(btn_row, "Sair  ✕", self._on_exit, "#5a1a1a").pack(
+            side=tk.RIGHT
+        )
+
+        # Lower row: Copyright and motto text
+        text_row = tk.Frame(footer, bg=_SURFACE)
+        text_row.pack(fill=tk.X, padx=18, pady=(2, 2))
+
+        tk.Label(
+            text_row,
+            text=(
+                "Z7_SentinelTray • Licenced under GPLv3"
+                " •  Câmara Municipal de Santa Bárbara d'Oeste/SP"
+                "  • Christian Martin dos Santos"
+            ),
+            font=("Segoe UI", 8),
+            fg=_MUTED,
+            bg=_SURFACE,
+        ).pack(side=tk.LEFT)
+
+        tk.Label(
+            text_row,
+            text="Dharma, virtude e gratidão.",
+            font=("Segoe UI", 8, "italic"),
+            fg=_MUTED,
+            bg=_SURFACE,
+        ).pack(side=tk.RIGHT)
+
         # ── Two-column body ───────────────────────────────────────────────────
         body_outer = tk.Frame(r, bg=_BG)
         body_outer.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
@@ -1409,62 +1466,6 @@ class StatusWindow:
         mon_outer, mon_c = self._make_card(right, "👁  MONITORES")
         mon_outer.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         self._monitors_content = mon_c
-
-        # ── Footer ────────────────────────────────────────────────────────────
-        tk.Frame(r, bg=_BORDER, height=1).pack(fill=tk.X)
-        footer = tk.Frame(r, bg=_SURFACE, pady=8)
-        footer.pack(fill=tk.X)
-
-        # Upper row: Buttons
-        btn_row = tk.Frame(footer, bg=_SURFACE)
-        btn_row.pack(fill=tk.X, padx=18, pady=(2, 4))
-
-        self._make_btn(btn_row, "⟳  Verificar Agora", self._trigger_scan, _BLUE).pack(
-            side=tk.LEFT, padx=(0, 6)
-        )
-        self._pause_btn = self._make_btn(btn_row, "⏸  Pausar", self._toggle_pause, _AMBER)
-        self._pause_btn.pack(side=tk.LEFT, padx=(0, 6))
-        if self._on_edit_recipients is not None:
-            self._make_btn(btn_row, "✉  Destinatários", self._on_edit_recipients, _TEAL).pack(
-                side=tk.LEFT, padx=(0, 6)
-            )
-        self._make_btn(btn_row, "⚙  Avançado", self._on_open_config, _BTN_DIM).pack(
-            side=tk.LEFT, padx=(0, 6)
-        )
-        self._make_btn(
-            btn_row, "↗  Repositório", lambda: webbrowser.open(_PROJECT_REPO_URL), _BTN_DIM
-        ).pack(side=tk.LEFT, padx=(0, 6))
-        theme_label = "☀  Tema Claro" if self._theme.is_dark else "🌙  Tema Escuro"
-        self._theme_btn = self._make_btn(btn_row, theme_label, self._toggle_theme, _BTN_DIM)
-        self._theme_btn.pack(side=tk.LEFT)
-
-        self._make_btn(btn_row, "Sair  ✕", self._on_exit, "#5a1a1a").pack(
-            side=tk.RIGHT
-        )
-
-        # Lower row: Copyright and motto text
-        text_row = tk.Frame(footer, bg=_SURFACE)
-        text_row.pack(fill=tk.X, padx=18, pady=(2, 2))
-
-        tk.Label(
-            text_row,
-            text=(
-                "Z7_SentinelTray • Licenced under GPLv3"
-                " •  Câmara Municipal de Santa Bárbara d'Oeste/SP"
-                "  • Christian Martin dos Santos"
-            ),
-            font=("Segoe UI", 8),
-            fg=_MUTED,
-            bg=_SURFACE,
-        ).pack(side=tk.LEFT)
-
-        tk.Label(
-            text_row,
-            text="Dharma, virtude e gratidão.",
-            font=("Segoe UI", 8, "italic"),
-            fg=_MUTED,
-            bg=_SURFACE,
-        ).pack(side=tk.RIGHT)
 
     def _make_card(self, parent: tk.Widget, title: str) -> tuple[tk.Frame, tk.Frame]:
         """Create a styled card. Returns (outer, content). Caller packs outer."""
