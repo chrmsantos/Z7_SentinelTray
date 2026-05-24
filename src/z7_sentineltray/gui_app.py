@@ -1327,7 +1327,7 @@ class StatusWindow:
             text=(
                 "Z7_SentinelTray • Licenced under GPLv3"
                 " •  Câmara Municipal de Santa Bárbara d'Oeste/SP"
-                "  • Christian Martin dos Santos"
+                "  • CMS"
             ),
             font=("Segoe UI", 8),
             fg=_MUTED,

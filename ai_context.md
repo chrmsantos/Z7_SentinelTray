@@ -7,7 +7,7 @@
 - **Versão atual:** 6.0.1  
 - **Python:** ≥ 3.11  
 - **Licença:** GPL-3.0-only  
-- **Autor:** Christian Martin dos Santos
+- **Autor:** CMS
 
 ---
 

@@ -1,4 +1,4 @@
-﻿# Z7_SentinelTray
+# Z7_SentinelTray
 
 Version: 4.1.0 (17-04-2026)
 
@@ -188,4 +188,4 @@ monitors:
 
 ## Author
 
-Christian Martin dos Santos
+CMS
