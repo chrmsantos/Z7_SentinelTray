@@ -20,6 +20,7 @@ from .config import AppConfig, get_project_root, get_user_data_dir, load_config
 from .dpapi_utils import save_secret
 from .status import StatusStore, format_timestamp
 from .tray_app import TrayIcon, set_console_visible
+from .updater import run_update_check
 from .validation_utils import validate_email_address
 
 LOGGER = logging.getLogger(__name__)
@@ -159,7 +160,7 @@ class _ThemeState:
     """Persisted holder for the active UI theme."""
 
     def __init__(self) -> None:
-        self._dark = True
+        self._dark = False
         self._load()
 
     def _pref_path(self) -> Path:
@@ -168,9 +169,9 @@ class _ThemeState:
     def _load(self) -> None:
         try:
             data = json.loads(self._pref_path().read_text(encoding="utf-8"))
-            self._dark = bool(data.get("dark_theme", True))
+            self._dark = bool(data.get("dark_theme", False))
         except Exception:
-            self._dark = True
+            self._dark = False
 
     def _save(self) -> None:
         try:
@@ -1200,7 +1201,7 @@ class StatusWindow:
                 user32 = ctypes.windll.user32
                 active_titles = []
                 @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-                def enum_proc(hwnd, lParam):
+                def enum_proc(hwnd, lParam) -> bool:
                     if user32.IsWindowVisible(hwnd):
                         length = user32.GetWindowTextLengthW(hwnd)
                         if length > 0:
@@ -1312,7 +1313,10 @@ class StatusWindow:
         ).pack(side=tk.LEFT, padx=(0, 6))
         theme_label = "☀  Tema Claro" if self._theme.is_dark else "🌙  Tema Escuro"
         self._theme_btn = self._make_btn(btn_row, theme_label, self._toggle_theme, _BTN_DIM)
-        self._theme_btn.pack(side=tk.LEFT)
+        self._theme_btn.pack(side=tk.LEFT, padx=(0, 6))
+        self._make_btn(btn_row, "🚀  Atualizar", self._trigger_update, _GREEN).pack(
+            side=tk.LEFT
+        )
 
         self._make_btn(btn_row, "Sair  ✕", self._on_exit, "#5a1a1a").pack(
             side=tk.RIGHT
@@ -1428,7 +1432,7 @@ class StatusWindow:
         self._win_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         win_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        def _on_mousewheel(event):
+        def _on_mousewheel(event) -> None:
             self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
         self._win_canvas.bind("<MouseWheel>", _on_mousewheel)
         self._win_scrollable.bind("<MouseWheel>", _on_mousewheel)
@@ -1785,15 +1789,15 @@ class StatusWindow:
             )
             lbl.pack(fill=tk.X, pady=2, padx=4)
 
-            def _on_scroll(event):
+            def _on_scroll(event) -> None:
                 self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
             lbl.bind("<MouseWheel>", _on_scroll)
             return
 
-        def _on_scroll(event):
+        def _on_scroll(event) -> None:
             self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        for idx, title in enumerate(active_windows, start=1):
+        for _idx, title in enumerate(active_windows, start=1):
             row = tk.Frame(self._win_scrollable, bg=p["card"])
             row.pack(fill=tk.X, pady=1)
             row.bind("<MouseWheel>", _on_scroll)
@@ -1842,6 +1846,10 @@ class StatusWindow:
                 activebackground=p["btn_dim"],
                 activeforeground=p["white"],
             )
+
+    def _trigger_update(self) -> None:
+        from . import __version__
+        run_update_check(self._root, self._theme, __version__)
 
 
 # ── Module-level helpers ──────────────────────────────────────────────────────
