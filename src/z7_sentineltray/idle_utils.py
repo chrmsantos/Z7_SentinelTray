@@ -30,3 +30,21 @@ def get_idle_seconds() -> float:
     tick_count: int = ctypes.windll.kernel32.GetTickCount()  # type: ignore[attr-defined]
     idle_ms = (tick_count - lii.dwTime) & 0xFFFFFFFF
     return idle_ms / 1000.0
+
+
+def is_screen_locked() -> bool:
+    """Return True if the Windows screen/workstation is locked."""
+    if sys.platform != "win32":
+        return False
+
+    import ctypes
+    user32 = ctypes.windll.user32
+    h_desktop = user32.OpenDesktopW("default", 0, False, 0x0100)
+    if h_desktop == 0:
+        return True
+    try:
+        result = user32.SwitchDesktop(h_desktop)
+        return result == 0
+    finally:
+        user32.CloseDesktop(h_desktop)
+

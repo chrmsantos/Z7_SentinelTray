@@ -23,18 +23,18 @@ def _prefs_path(data_dir: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_default_theme_is_dark(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without a saved preference file, dark mode is the default."""
+def test_default_theme_is_light(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a saved preference file, light mode is the default."""
     monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
     state = _ThemeState()
-    assert state.is_dark is True
+    assert state.is_dark is False
 
 
-def test_default_palette_is_dark_palette(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_palette_is_light_palette(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
     state = _ThemeState()
-    # Dark palette has a very dark background colour
-    assert state.palette["bg"] == "#0d1117"
+    # Light palette has a white background colour
+    assert state.palette["bg"] == "#ffffff"
 
 
 # ---------------------------------------------------------------------------
@@ -45,28 +45,28 @@ def test_default_palette_is_dark_palette(tmp_path: Path, monkeypatch: pytest.Mon
 def test_save_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
     state = _ThemeState()
-    state._dark = False
+    state._dark = True
     state._save()
 
     prefs = _prefs_path(tmp_path)
     assert prefs.exists()
     data = json.loads(prefs.read_text(encoding="utf-8"))
-    assert data == {"dark_theme": False}
+    assert data == {"dark_theme": True}
 
 
-def test_load_restores_light_theme(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A new session should restore the previously saved light theme."""
+def test_load_restores_dark_theme_from_save(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A new session should restore the previously saved dark theme."""
     monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
 
-    # First session: user switches to light
+    # First session: user switches to dark
     session1 = _ThemeState()
-    assert session1.is_dark is True
-    session1._dark = False
+    assert session1.is_dark is False
+    session1._dark = True
     session1._save()
 
     # Second session: new instance should load from file
     session2 = _ThemeState()
-    assert session2.is_dark is False
+    assert session2.is_dark is True
 
 
 def test_load_restores_dark_theme(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,14 +95,14 @@ def test_light_palette_loaded_after_save(tmp_path: Path, monkeypatch: pytest.Mon
 # ---------------------------------------------------------------------------
 
 
-def test_corrupted_prefs_falls_back_to_dark(
+def test_corrupted_prefs_falls_back_to_light(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
     _prefs_path(tmp_path).write_text("not valid json", encoding="utf-8")
 
     state = _ThemeState()
-    assert state.is_dark is True
+    assert state.is_dark is False
 
 
 def test_save_creates_parent_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

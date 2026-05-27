@@ -1,5 +1,5 @@
 {
-    "python.defaultInterpreterPath": "c:\\Users\\csantos\\AppData\\Local\\ZWave\\Apps\\sentineltray\\.venv\\Scripts\\python.exe",
+    "python.defaultInterpreterPath": "c:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\.venv\\Scripts\\python.exe",
     "files.readonlyInclude": {
         "{**/.c4z/.extsrcs/*.PROTSYM.cbl,**/.c4z/.extsrcs/*.PROTSYM.listing}": true
     },

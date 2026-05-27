@@ -28,7 +28,7 @@ from .email_sender import (
     QueueingEmailSender,
     build_sender,
 )
-from .idle_utils import get_idle_seconds
+from .idle_utils import get_idle_seconds, is_screen_locked
 from .io_utils import read_json_safe
 from .logging_setup import log_context, sanitize_text, scan_context, setup_logging
 from .scan_utils import dedupe_items, filter_debounce, filter_min_repeat
@@ -545,6 +545,8 @@ class Notifier:
                     )
                 except WindowUnavailableError as exc:
                     message = f"erro: janela indisponível: {exc}"
+                    if is_screen_locked():
+                        message += " (a tela do usuário do windows está bloqueada)"
                     self._handle_monitor_error(monitor, message)
                     self._last_scan_error = True
                     monitor_error = "window_unavailable"
@@ -1053,7 +1055,10 @@ class Notifier:
                             if is_manual and not self._last_scan_had_match:
                                 self._send_manual_no_match_test()
                 except WindowUnavailableError as exc:
-                    self._handle_error(f"erro: janela indisponível: {exc}")
+                    message = f"erro: janela indisponível: {exc}"
+                    if is_screen_locked():
+                        message += " (a tela do usuário do windows está bloqueada)"
+                    self._handle_error(message)
                     LOGGER.info(
                         "Skipping scan; %s",
                         exc,
