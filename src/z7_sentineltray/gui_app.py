@@ -68,6 +68,22 @@ def _color_hover(hex_color: str) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def _get_contrast_fg(hex_color: str) -> str:
+    """Return #ffffff for dark backgrounds and #1f2328 for light backgrounds to ensure optimal contrast."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return "#ffffff"
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    except ValueError:
+        return "#ffffff"
+
+    # Calculate relative luminance
+    luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    return "#1f2328" if luminance > 150 else "#ffffff"
+
+
+
 def _add_hover(btn: tk.Button, bg: str) -> None:
     """Bind a dynamic brightness/darkness-on-hover effect to *btn*."""
     btn._normal_bg = bg
@@ -150,6 +166,15 @@ def _apply_theme_walk(root: tk.Widget, old_pal: dict, new_pal: dict) -> None:
                     w.configure(**{opt: color_map[cur]})
             except tk.TclError:
                 pass
+
+        if isinstance(w, tk.Button):
+            try:
+                bg = w.cget("bg")
+                fg = _get_contrast_fg(bg)
+                w.configure(fg=fg, activeforeground=fg)
+            except Exception:
+                pass
+
         for child in w.winfo_children():
             _remap(child)
 
@@ -267,12 +292,15 @@ def prompt_smtp_password_gui(username: str, monitor_index: int) -> str | None:
 
     btn_frame = tk.Frame(dialog, bg=_BG)
     btn_frame.pack(pady=14)
+    _ok_fg = _get_contrast_fg(_GREEN2)
     _ok_btn = tk.Button(
         btn_frame,
         text="OK",
         command=on_ok,
         bg=_GREEN2,
-        fg=_WHITE,
+        fg=_ok_fg,
+        activeforeground=_ok_fg,
+        activebackground=_GREEN2,
         relief="flat",
         padx=20,
         font=("Segoe UI", 9),
@@ -280,12 +308,15 @@ def prompt_smtp_password_gui(username: str, monitor_index: int) -> str | None:
     )
     _ok_btn.pack(side="left", padx=6)
     _add_hover(_ok_btn, _GREEN2)
+    _cancel_fg = _get_contrast_fg(_BTN_DIM)
     _cancel_btn = tk.Button(
         btn_frame,
         text="Cancelar",
         command=on_cancel,
         bg=_BTN_DIM,
-        fg=_TEXT,
+        fg=_cancel_fg,
+        activeforeground=_cancel_fg,
+        activebackground=_BTN_DIM,
         relief="flat",
         padx=10,
         font=("Segoe UI", 9),
@@ -485,14 +516,15 @@ class ConfigEditorWindow:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _make_btn(self, parent: tk.Frame, text: str, cmd: Callable[[], None], bg: str) -> tk.Button:
+        fg = _get_contrast_fg(bg)
         btn = tk.Button(
             parent,
             text=text,
             command=cmd,
             font=("Segoe UI", 9, "bold"),
-            fg=_WHITE,
+            fg=fg,
             bg=bg,
-            activeforeground=_WHITE,
+            activeforeground=fg,
             activebackground=bg,
             relief=tk.FLAT,
             cursor="hand2",
@@ -815,14 +847,15 @@ class EditToAddressesDialog:
         def on_cancel() -> None:
             win.destroy()
 
+        _save_fg = _get_contrast_fg(_GREEN2)
         _save_btn = tk.Button(
             footer,
             text="✓  Salvar",
             command=on_save,
             font=("Segoe UI", 9, "bold"),
-            fg=_WHITE,
+            fg=_save_fg,
             bg=_GREEN2,
-            activeforeground=_WHITE,
+            activeforeground=_save_fg,
             activebackground=_GREEN2,
             relief=tk.FLAT,
             cursor="hand2",
@@ -832,14 +865,15 @@ class EditToAddressesDialog:
         )
         _save_btn.pack(side=tk.LEFT, padx=(16, 6))
         _add_hover(_save_btn, _GREEN2)
+        _cancel_fg = _get_contrast_fg(_BTN_DIM)
         _cancel_btn = tk.Button(
             footer,
             text="Cancelar",
             command=on_cancel,
             font=("Segoe UI", 9, "bold"),
-            fg=_TEXT,
+            fg=_cancel_fg,
             bg=_BTN_DIM,
-            activeforeground=_TEXT,
+            activeforeground=_cancel_fg,
             activebackground=_BTN_DIM,
             relief=tk.FLAT,
             cursor="hand2",
@@ -1104,14 +1138,15 @@ class SmtpCredentialsDialog:
         def on_cancel() -> None:
             win.destroy()
 
+        _save_fg = _get_contrast_fg(_GREEN2)
         _save_btn = tk.Button(
             footer,
             text="✓  Salvar",
             command=on_save,
             font=("Segoe UI", 9, "bold"),
-            fg=_WHITE,
+            fg=_save_fg,
             bg=_GREEN2,
-            activeforeground=_WHITE,
+            activeforeground=_save_fg,
             activebackground=_GREEN2,
             relief=tk.FLAT,
             cursor="hand2",
@@ -1121,14 +1156,15 @@ class SmtpCredentialsDialog:
         )
         _save_btn.pack(side=tk.LEFT, padx=(16, 6))
         _add_hover(_save_btn, _GREEN2)
+        _cancel_fg = _get_contrast_fg(_BTN_DIM)
         _cancel_btn = tk.Button(
             footer,
             text="Cancelar",
             command=on_cancel,
             font=("Segoe UI", 9, "bold"),
-            fg=_TEXT,
+            fg=_cancel_fg,
             bg=_BTN_DIM,
-            activeforeground=_TEXT,
+            activeforeground=_cancel_fg,
             activebackground=_BTN_DIM,
             relief=tk.FLAT,
             cursor="hand2",
@@ -1522,14 +1558,15 @@ class StatusWindow:
             self._value_labels[key] = lbl
 
     def _make_btn(self, parent: tk.Frame, text: str, cmd: Callable[[], None], bg: str) -> tk.Button:
+        fg = _get_contrast_fg(bg)
         btn = tk.Button(
             parent,
             text=text,
             command=cmd,
             font=("Segoe UI", 9, "bold"),
-            fg=_WHITE,
+            fg=fg,
             bg=bg,
-            activeforeground=_WHITE,
+            activeforeground=fg,
             activebackground=bg,
             relief=tk.FLAT,
             cursor="hand2",
@@ -1649,9 +1686,12 @@ class StatusWindow:
             else:
                 btn_text = "⏸  Pausar"
                 btn_bg = p["amber"]
+            fg = _get_contrast_fg(btn_bg)
             self._pause_btn.configure(
                 text=btn_text,
                 bg=btn_bg,
+                fg=fg,
+                activeforeground=fg,
                 activebackground=btn_bg,
             )
             _add_hover(self._pause_btn, btn_bg)
