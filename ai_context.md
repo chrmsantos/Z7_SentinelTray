@@ -4,7 +4,7 @@
 
 **Z7_SentinelTray** é um notificador Windows que lê texto visível de uma janela de aplicativo alvo e envia e-mail quando uma frase configurada aparece. Roda como processo de console (ou `.exe` nomeado) sem privilégios de administrador.
 
-- **Versão atual:** 6.0.1  
+- **Versão atual:** 6.1.7  
 - **Python:** ≥ 3.11  
 - **Licença:** GPL-3.0-only  
 - **Autor:** CMS
@@ -165,6 +165,11 @@ dist\Z7_SentinelTray.exe
 ```
 
 O spec do PyInstaller está em `Z7_SentinelTray.spec`. O `.exe` inclui o template de config e assets.
+
+> [!IMPORTANT]
+> **Políticas de Lançamento e Atualização:**
+> - As releases estáveis devem **sempre ser publicadas no GitHub** com a tag Git correspondente (ex: `v6.1.7`) e o executável compilado `dist/Z7_SentinelTray.exe` anexado como asset da release.
+> - Esse procedimento é estritamente obrigatório para que o mecanismo de atualização automática presente no botão da interface gráfica (`updater.py`) funcione corretamente para todos os usuários finais.
 
 ---
 
