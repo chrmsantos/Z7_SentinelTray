@@ -272,10 +272,46 @@ class UpdateProgressWindow:
             messagebox.showinfo(
                 "Atualização Concluída",
                 "A atualização foi baixada e instalada com sucesso!\n\n"
-                "A nova versão será efetivada na próxima execução do aplicativo.",
+                "O aplicativo será reiniciado automaticamente na nova versão.",
                 parent=self.parent,
             )
             self.win.destroy()
+
+            # Release the single-instance mutex to allow the new process to start immediately
+            from . import entrypoint
+            import ctypes
+            if entrypoint._mutex_handle:
+                try:
+                    ctypes.windll.kernel32.CloseHandle(entrypoint._mutex_handle)
+                    entrypoint._mutex_handle = None
+                except Exception:
+                    pass
+
+            # Unlink PID file so the new instance starts cleanly
+            try:
+                pid_path = entrypoint._pid_file_path()
+                if pid_path.exists():
+                    pid_path.unlink()
+            except Exception:
+                pass
+
+            # Launch the new version of the executable
+            import subprocess
+            try:
+                subprocess.Popen([sys.executable])
+            except Exception as exc:
+                LOGGER.exception("Failed to restart application after update")
+                messagebox.showerror(
+                    "Erro ao Reiniciar",
+                    f"A atualização foi instalada com sucesso, mas ocorreu um erro ao reiniciar o aplicativo:\n{exc}",
+                    parent=self.parent,
+                )
+
+            # Exit the current process gracefully by quitting the Tkinter mainloop
+            try:
+                self.parent.quit()
+            except Exception:
+                sys.exit(0)
         except Exception as exc:
             LOGGER.exception("Failed to install update")
             if temp_dest.exists():
