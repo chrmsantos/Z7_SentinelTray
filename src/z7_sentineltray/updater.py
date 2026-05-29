@@ -333,7 +333,10 @@ class UpdateProgressWindow:
 
 
 def run_update_check(
-    parent: tk.Tk | tk.Toplevel, theme_state: _ThemeState, current_version: str
+    parent: tk.Tk | tk.Toplevel,
+    theme_state: _ThemeState,
+    current_version: str,
+    on_startup: bool = False,
 ) -> None:
     """Check for updates on GitHub and launch download if accepted by the user.
 
@@ -341,6 +344,7 @@ def run_update_check(
         parent: The parent Tkinter window.
         theme_state: The current theme state of the application.
         current_version: The current version of the application.
+        on_startup: If True, do not show messages for "up to date" or network errors.
     """
 
     def do_check() -> None:
@@ -352,22 +356,24 @@ def run_update_check(
                 data = json.loads(response.read().decode("utf-8"))
 
             if data.get("prerelease") or data.get("draft"):
-                parent.after(
-                    0,
-                    lambda: messagebox.showinfo(
-                        "Atualização", "Você já está na versão mais recente.", parent=parent
-                    ),
-                )
+                if not on_startup:
+                    parent.after(
+                        0,
+                        lambda: messagebox.showinfo(
+                            "Atualização", "Você já está na versão mais recente.", parent=parent
+                        ),
+                    )
                 return
 
             tag_name: str = data.get("tag_name", "")
             if not tag_name:
-                parent.after(
-                    0,
-                    lambda: messagebox.showinfo(
-                        "Atualização", "Você já está na versão mais recente.", parent=parent
-                    ),
-                )
+                if not on_startup:
+                    parent.after(
+                        0,
+                        lambda: messagebox.showinfo(
+                            "Atualização", "Você já está na versão mais recente.", parent=parent
+                        ),
+                    )
                 return
 
             # Find executable asset
@@ -379,26 +385,28 @@ def run_update_check(
                     break
 
             if not exe_asset:
-                parent.after(
-                    0,
-                    lambda: messagebox.showwarning(
-                        "Atualização",
-                        f"A versão {tag_name} está disponível, mas nenhum executável "
-                        f"compatível foi encontrado no GitHub.",
-                        parent=parent,
-                    ),
-                )
+                if not on_startup:
+                    parent.after(
+                        0,
+                        lambda: messagebox.showwarning(
+                            "Atualização",
+                            f"A versão {tag_name} está disponível, mas nenhum executável "
+                            f"compatível foi encontrado no GitHub.",
+                            parent=parent,
+                        ),
+                    )
                 return
 
             if parse_version(tag_name) <= parse_version(current_version):
-                parent.after(
-                    0,
-                    lambda: messagebox.showinfo(
-                        "Atualização",
-                        "Você já está na versão estável mais recente do aplicativo.",
-                        parent=parent,
-                    ),
-                )
+                if not on_startup:
+                    parent.after(
+                        0,
+                        lambda: messagebox.showinfo(
+                            "Atualização",
+                            "Você já está na versão estável mais recente do aplicativo.",
+                            parent=parent,
+                        ),
+                    )
                 return
 
             # New version found! Ask user
@@ -421,13 +429,14 @@ def run_update_check(
 
         except Exception as exc:
             LOGGER.exception("Failed to check for updates")
-            parent.after(
-                0,
-                lambda e=exc: messagebox.showerror(
-                    "Erro de Verificação",
-                    f"Erro ao verificar atualizações:\n{e}",
-                    parent=parent,
-                ),
-            )
+            if not on_startup:
+                parent.after(
+                    0,
+                    lambda e=exc: messagebox.showerror(
+                        "Erro de Verificação",
+                        f"Erro ao verificar atualizações:\n{e}",
+                        parent=parent,
+                    ),
+                )
 
     threading.Thread(target=do_check, daemon=True).start()
