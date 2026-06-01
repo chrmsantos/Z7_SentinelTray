@@ -31,6 +31,7 @@ class StatusSnapshot:
     monitor_breakers_active: dict[str, bool]
     breaker_active_count: int
     active_windows: list[str]
+    update_status: str
 
 
 class StatusStore:
@@ -65,6 +66,7 @@ class StatusStore:
         self._monitor_failures: dict[str, int] = {}
         self._monitor_breakers_active: dict[str, bool] = {}
         self._active_windows: list[str] = []
+        self._update_status = "Não verificado"
 
     def set_running(self, value: bool) -> None:
         """Set the *running* flag."""
@@ -142,6 +144,11 @@ class StatusStore:
         with self._lock:
             self._active_windows = list(value)
 
+    def set_update_status(self, value: str) -> None:
+        """Record the current update check status."""
+        with self._lock:
+            self._update_status = value
+
     def snapshot(self) -> StatusSnapshot:
         """Return an immutable copy of the current application status."""
         with self._lock:
@@ -166,6 +173,7 @@ class StatusStore:
                 monitor_breakers_active=dict(self._monitor_breakers_active),
                 breaker_active_count=breaker_active_count,
                 active_windows=list(self._active_windows),
+                update_status=self._update_status,
             )
 
 

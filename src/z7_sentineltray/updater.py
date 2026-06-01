@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .gui_app import _ThemeState
+    from .status import StatusStore
 
 LOGGER = logging.getLogger(__name__)
 
@@ -337,6 +338,7 @@ def run_update_check(
     theme_state: _ThemeState,
     current_version: str,
     on_startup: bool = False,
+    status: StatusStore | None = None,
 ) -> None:
     """Check for updates on GitHub and launch download if accepted by the user.
 
@@ -345,9 +347,12 @@ def run_update_check(
         theme_state: The current theme state of the application.
         current_version: The current version of the application.
         on_startup: If True, do not show messages for "up to date" or network errors.
+        status: The global thread-safe status store to update.
     """
 
     def do_check() -> None:
+        if status:
+            status.set_update_status("Verificando...")
         try:
             req = urllib.request.Request(
                 _REPO_API_URL, headers={"User-Agent": "Z7_SentinelTray-Updater"}
@@ -356,6 +361,8 @@ def run_update_check(
                 data = json.loads(response.read().decode("utf-8"))
 
             if data.get("prerelease") or data.get("draft"):
+                if status:
+                    status.set_update_status("Atualizado")
                 if not on_startup:
                     parent.after(
                         0,
@@ -367,6 +374,8 @@ def run_update_check(
 
             tag_name: str = data.get("tag_name", "")
             if not tag_name:
+                if status:
+                    status.set_update_status("Atualizado")
                 if not on_startup:
                     parent.after(
                         0,
@@ -385,6 +394,8 @@ def run_update_check(
                     break
 
             if not exe_asset:
+                if status:
+                    status.set_update_status(f"Atualização disponível ({tag_name})")
                 if not on_startup:
                     parent.after(
                         0,
@@ -398,6 +409,8 @@ def run_update_check(
                 return
 
             if parse_version(tag_name) <= parse_version(current_version):
+                if status:
+                    status.set_update_status("Atualizado")
                 if not on_startup:
                     parent.after(
                         0,
@@ -409,7 +422,10 @@ def run_update_check(
                     )
                 return
 
-            # New version found! Ask user
+            # New version found!
+            if status:
+                status.set_update_status(f"Atualização disponível ({tag_name})")
+
             download_url: str = exe_asset.get("browser_download_url", "")
             filename: str = exe_asset.get("name", "")
             release_name: str = data.get("name", tag_name)
@@ -429,6 +445,8 @@ def run_update_check(
 
         except Exception as exc:
             LOGGER.exception("Failed to check for updates")
+            if status:
+                status.set_update_status("Erro ao verificar")
             if not on_startup:
                 parent.after(
                     0,

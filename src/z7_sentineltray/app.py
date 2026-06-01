@@ -259,6 +259,7 @@ class Notifier:
         self._last_scan_had_match = False
         self._last_no_match_test_at: float = 0.0
         self._last_error_notification_at = 0.0
+        self._last_disk_check_at: float = 0.0
         self._queue_stats: dict[str, int] = {
             "queued": 0,
             "sent": 0,
@@ -885,6 +886,10 @@ class Notifier:
             LOGGER.exception("Telemetry write failed", extra={"category": "error"})
 
     def _ensure_free_disk(self) -> None:
+        now = time.monotonic()
+        if now - self._last_disk_check_at < 300:  # 5-minute cooldown
+            return
+        self._last_disk_check_at = now
         try:
             log_dir = Path(self.config.log_file).parent
             usage = shutil.disk_usage(log_dir)

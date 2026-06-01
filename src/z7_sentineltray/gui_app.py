@@ -16,7 +16,7 @@ from threading import Event, Lock, Thread
 from tkinter import messagebox
 
 from .app import Notifier
-from .config import AppConfig, get_project_root, get_user_data_dir, load_config
+from .config import AppConfig, get_config_template_path, get_project_root, get_user_data_dir, load_config
 from .dpapi_utils import save_secret
 from .status import StatusStore, format_timestamp
 from .tray_app import TrayIcon, set_console_visible
@@ -545,18 +545,10 @@ class ConfigEditorWindow:
             parent=self._win,
         ):
             return
-        meipass = getattr(sys, "_MEIPASS", None)
-        candidates = []
-        if meipass:
-            candidates.append(Path(meipass) / "config" / "config.local.yaml.example")
-        candidates.append(get_project_root() / "config" / "config.local.yaml.example")
-        template_content: str | None = None
-        for example_path in candidates:
-            try:
-                template_content = example_path.read_text(encoding="utf-8")
-                break
-            except Exception:
-                continue
+        try:
+            template_content = get_config_template_path().read_text(encoding="utf-8")
+        except Exception:
+            template_content = None
         if template_content is None:
             self._set_status("✗ Template padrão não encontrado", _RED)
             return
@@ -573,18 +565,10 @@ class ConfigEditorWindow:
         if not self._cfg_path.exists():
             import sys
 
-            meipass = getattr(sys, "_MEIPASS", None)
-            candidates = []
-            if meipass:
-                candidates.append(Path(meipass) / "config" / "config.local.yaml.example")
-            candidates.append(get_project_root() / "config" / "config.local.yaml.example")
-            template_content: str | None = None
-            for example_path in candidates:
-                try:
-                    template_content = example_path.read_text(encoding="utf-8")
-                    break
-                except Exception:
-                    continue
+            try:
+                template_content = get_config_template_path().read_text(encoding="utf-8")
+            except Exception:
+                template_content = None
             if template_content is None:
                 template_content = "# Z7_SentinelTray — configuração local\n"
             self._cfg_path.write_text(template_content, encoding="utf-8")
@@ -1312,13 +1296,28 @@ class StatusWindow:
             anchor="w",
         ).pack(anchor="w")
 
+        meta_frame = tk.Frame(header, bg=_SURFACE)
+        meta_frame.pack(side=tk.RIGHT, padx=18)
+
         tk.Label(
-            header,
+            meta_frame,
             text=f"v{__version_label__}  ·  {__release_date__}",
             font=("Segoe UI", 8),
             fg=_MUTED,
             bg=_SURFACE,
-        ).pack(side=tk.RIGHT, padx=18)
+            anchor="e",
+        ).pack(anchor="e")
+
+        self._update_status_var = tk.StringVar(value="Não verificado")
+        self._update_status_lbl = tk.Label(
+            meta_frame,
+            textvariable=self._update_status_var,
+            font=("Segoe UI", 8, "bold"),
+            fg=_MUTED,
+            bg=_SURFACE,
+            anchor="e",
+        )
+        self._update_status_lbl.pack(anchor="e", pady=(2, 0))
 
         tk.Frame(r, bg=_BORDER, height=1).pack(fill=tk.X)
 
@@ -1662,6 +1661,20 @@ class StatusWindow:
         snap = self._status.snapshot()
         cfg = self._get_config()
 
+        # ── Update Status indicator ───────────────────────────────────────────
+        up_status = getattr(snap, "update_status", "")
+        if up_status:
+            self._update_status_var.set(up_status)
+            p = self._theme.palette
+            if "disponível" in up_status.lower():
+                self._update_status_lbl.configure(fg=p["amber"])
+            elif "erro" in up_status.lower():
+                self._update_status_lbl.configure(fg=p["red"])
+            elif "atualizado" in up_status.lower():
+                self._update_status_lbl.configure(fg=p["green"])
+            else:
+                self._update_status_lbl.configure(fg=p["muted"])
+
         # ── Status indicator ──────────────────────────────────────────────────
         if self._status_dot is None or self._status_text is None:
             return
@@ -1889,7 +1902,7 @@ class StatusWindow:
 
     def _trigger_update(self) -> None:
         from . import __version__
-        run_update_check(self._root, self._theme, __version__)
+        run_update_check(self._root, self._theme, __version__, status=self._status)
 
 
 # ── Module-level helpers ──────────────────────────────────────────────────────
@@ -2162,7 +2175,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     # ── Check for updates on startup ──────────────────────────────────────────
     def _startup_update_check() -> None:
         from . import __version__
-        run_update_check(root, theme, __version__, on_startup=True)
+        run_update_check(root, theme, __version__, on_startup=True, status=status)
 
     root.after(1000, _startup_update_check)
 

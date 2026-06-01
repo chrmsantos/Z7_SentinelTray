@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from . import __release_date__, __version_label__
-from .config import AppConfig, get_project_root, get_user_data_dir, get_user_log_dir, load_config
+from .config import AppConfig, get_config_template_path, get_project_root, get_user_data_dir, get_user_log_dir, load_config
 from .logging_setup import setup_logging
 
 LOGGER = logging.getLogger(__name__)
@@ -24,23 +24,15 @@ _mutex_handle = None
 def _load_config_template() -> str:
     """Return the contents of config.local.yaml.example as the default template.
 
-    Searches the PyInstaller bundle directory first, then the project root.
     Raises FileNotFoundError if the example file cannot be located.
     """
-    meipass = getattr(sys, "_MEIPASS", None)
-    candidates = []
-    if meipass:
-        candidates.append(Path(meipass) / "config" / "config.local.yaml.example")
-    candidates.append(get_project_root() / "config" / "config.local.yaml.example")
-    for example_path in candidates:
-        try:
-            return example_path.read_text(encoding="utf-8")
-        except Exception:
-            continue
-    raise FileNotFoundError(
-        "Config template not found. Expected config/config.local.yaml.example "
-        "alongside the application."
-    )
+    try:
+        return get_config_template_path().read_text(encoding="utf-8")
+    except Exception as exc:
+        raise FileNotFoundError(
+            "Config template not found. Expected config/config.local.yaml.example "
+            "alongside the application."
+        ) from exc
 
 
 def _pid_file_path() -> Path:

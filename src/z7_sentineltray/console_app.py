@@ -20,6 +20,7 @@ from threading import Event, Thread
 from .app import Notifier
 from .config import (
     AppConfig,
+    get_config_template_path,
     get_project_root,
     get_user_data_dir,
     get_user_log_dir,
@@ -109,18 +110,10 @@ def _create_config_editor() -> tuple[  # noqa: C901
             target_path = config_path()
             if not target_path.exists():
                 target_path.parent.mkdir(parents=True, exist_ok=True)
-                meipass = getattr(sys, "_MEIPASS", None)
-                candidates = []
-                if meipass:
-                    candidates.append(Path(meipass) / "config" / "config.local.yaml.example")
-                candidates.append(get_project_root() / "config" / "config.local.yaml.example")
-                template_content: str | None = None
-                for example_path in candidates:
-                    try:
-                        template_content = example_path.read_text(encoding="utf-8")
-                        break
-                    except Exception:
-                        continue
+                try:
+                    template_content = get_config_template_path().read_text(encoding="utf-8")
+                except Exception:
+                    template_content = None
                 if template_content is None:
                     template_content = (
                         "# Z7_SentinelTray - configuração local\n"

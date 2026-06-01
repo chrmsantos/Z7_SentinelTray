@@ -526,3 +526,18 @@ def load_config_with_override(base_path: str, override_path: str) -> AppConfig:
     override = _load_yaml(Path(override_path))
     merged = _merge_dicts(base, override)
     return _build_config(merged)
+
+
+def get_config_template_path() -> Path:
+    """Return the resolved path to the config.local.yaml.example template.
+
+    Checks the PyInstaller temporary _MEIPASS folder first, then falls back
+    to the project root under development mode.
+    """
+    import sys
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        path = Path(meipass) / "config" / "config.local.yaml.example"
+        if path.exists():
+            return path
+    return get_project_root() / "config" / "config.local.yaml.example"

@@ -16,6 +16,10 @@ def test_status_store_snapshot() -> None:
 
     snapshot = store.snapshot()
     assert snapshot.running is True
+    assert snapshot.update_status == "Não verificado"
+    store.set_update_status("Atualizado")
+    snapshot2 = store.snapshot()
+    assert snapshot2.update_status == "Atualizado"
     assert snapshot.paused is True
     assert snapshot.last_scan == "2026-01-19T23:00:00-03:00"
     assert snapshot.last_match == "2026-01-19T23:00:00-03:00"

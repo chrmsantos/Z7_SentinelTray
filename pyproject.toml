@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "z7_sentineltray"
-version = "6.1.8"
+version = "6.2.0"
 requires-python = ">=3.11"
 license = { text = "GPL-3.0-only" }
 authors = [

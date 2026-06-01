@@ -157,7 +157,18 @@ def _run_exe(
             stderr=subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
         )
-        time.sleep(kill_after)
+        # Poll dynamically for up to 45 seconds waiting for the run log to be created.
+        # This gracefully handles Windows Defender scanning overhead during cold starts.
+        poll_limit = max(45.0, kill_after)
+        poll_interval = 0.5
+        elapsed = 0.0
+        while elapsed < poll_limit:
+            if _collect_run_logs(root):
+                break
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+        # Allow an extra 2 seconds for startup log markers to be written stably
+        time.sleep(2.0)
         # Kill the whole process tree so child processes don't keep pipes open.
         _kill_tree(proc.pid)
         # Drain remaining pipe data with a hard timeout.
