@@ -1,4 +1,4 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 
 
 a = Analysis(
@@ -6,7 +6,7 @@ a = Analysis(
     pathex=['C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\src'],
     binaries=[],
     datas=[('config/config.local.yaml.example', 'config')],
-    hiddenimports=[],
+    hiddenimports=["unicodedata"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
