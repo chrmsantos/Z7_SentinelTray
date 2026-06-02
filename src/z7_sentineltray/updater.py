@@ -299,7 +299,15 @@ class UpdateProgressWindow:
             # Launch the new version of the executable
             import subprocess
             try:
-                subprocess.Popen([sys.executable])
+                # Remove PyInstaller-specific environment variables so that the restarted
+                # process does not reuse the old process's extraction directory (_MEIPASS).
+                env = os.environ.copy()
+                if "_MEIPASS" in env:
+                    env.pop("_MEIPASS")
+                for key in list(env.keys()):
+                    if key.startswith("_MEI"):
+                        env.pop(key, None)
+                subprocess.Popen([sys.executable], env=env)
             except Exception as exc:
                 LOGGER.exception("Failed to restart application after update")
                 messagebox.showerror(
