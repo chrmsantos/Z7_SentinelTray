@@ -80,6 +80,12 @@ class UpdateProgressWindow:
         self.palette = self.theme.palette
         self.win.configure(bg=self.palette["bg"])
 
+        LOGGER.info(
+            "Initializing UpdateProgressWindow (download_url=%s, dest_path=%s)...",
+            self.download_url,
+            self.dest_path,
+            extra={"category": "update"},
+        )
         self._build_ui()
 
         self.cancel_event = threading.Event()
@@ -174,11 +180,13 @@ class UpdateProgressWindow:
         """Prompt user for confirmation when canceling the download."""
         if self.cancel_event.is_set():
             return
+        LOGGER.info("User requested cancellation of the download.", extra={"category": "update"})
         if messagebox.askyesno(
             "Cancelar Download",
             "Deseja realmente cancelar o download da atualização?",
             parent=self.win,
         ):
+            LOGGER.info("User confirmed download cancellation.", extra={"category": "update"})
             self.cancel_event.set()
             self.status_var.set("Cancelando...")
             self.win.after(200, self.win.destroy)
@@ -186,13 +194,25 @@ class UpdateProgressWindow:
     def _run_download(self) -> None:
         temp_dest = self.dest_path.with_suffix(".tmp_download")
         try:
+            LOGGER.info(
+                "Starting download from %s to %s",
+                self.download_url,
+                temp_dest,
+                extra={"category": "update"},
+            )
             req = urllib.request.Request(
                 self.download_url, headers={"User-Agent": "Z7_SentinelTray-Updater"}
             )
             with urllib.request.urlopen(req, timeout=30) as response:
                 total_size = int(response.info().get("Content-Length", 0))
+                LOGGER.info(
+                    "Connected to download server. Expected total size: %s bytes",
+                    total_size,
+                    extra={"category": "update"},
+                )
                 bytes_downloaded = 0
                 block_size = 16384
+                last_logged_quarter = 0
 
                 with open(temp_dest, "wb") as f:
                     while not self.cancel_event.is_set():
@@ -203,6 +223,17 @@ class UpdateProgressWindow:
                         bytes_downloaded += len(block)
 
                         percent = (bytes_downloaded / total_size) * 100 if total_size else 0
+                        current_quarter = int(percent // 25) * 25
+                        if current_quarter > last_logged_quarter and current_quarter <= 100:
+                            LOGGER.info(
+                                "Download progress: %d%% (%d/%d bytes)",
+                                current_quarter,
+                                bytes_downloaded,
+                                total_size,
+                                extra={"category": "update"},
+                            )
+                            last_logged_quarter = current_quarter
+
                         speed_msg = (
                             f"Baixando: {percent:.1f}% "
                             f"({bytes_downloaded // 1024} KB / {total_size // 1024} KB)"
@@ -212,18 +243,28 @@ class UpdateProgressWindow:
                         )
 
             if self.cancel_event.is_set():
+                LOGGER.info(
+                    "Download loop terminated due to cancellation. Cleaning up temporary file...",
+                    extra={"category": "update"},
+                )
                 if temp_dest.exists():
                     temp_dest.unlink(missing_ok=True)
                 return
+
+            LOGGER.info(
+                "Download completed successfully. Total size: %s bytes. Requesting finalization...",
+                bytes_downloaded,
+                extra={"category": "update"},
+            )
 
             # Request finalization in main GUI thread
             self.win.after(0, lambda: self.status_var.set("Instalando atualização..."))
             self.win.after(0, lambda: self._finalize_update(temp_dest))
 
         except Exception as exc:
+            LOGGER.exception("Failed to download update", extra={"category": "update"})
             if temp_dest.exists():
                 temp_dest.unlink(missing_ok=True)
-            LOGGER.exception("Failed to download update")
             self.win.after(0, lambda e=exc: self._handle_error(e))
 
     def _update_ui_state(self, percent: float, msg: str) -> None:
@@ -237,12 +278,26 @@ class UpdateProgressWindow:
             if not is_frozen:
                 from .config import get_project_root
 
+                LOGGER.info(
+                    "Finalizing update in DEVELOPMENT mode. Simulating update process...",
+                    extra={"category": "update"},
+                )
                 # Dev mode target path simulation
                 dev_dest = get_project_root() / "dist" / "Z7_SentinelTray.exe"
                 dev_dest.parent.mkdir(parents=True, exist_ok=True)
                 if dev_dest.exists():
+                    LOGGER.info(
+                        "Deleting existing simulated dev executable: %s",
+                        dev_dest,
+                        extra={"category": "update"},
+                    )
                     dev_dest.unlink()
                 os.rename(temp_dest, dev_dest)
+                LOGGER.info(
+                    "Development update simulation complete. Saved to %s",
+                    dev_dest,
+                    extra={"category": "update"},
+                )
                 messagebox.showinfo(
                     "Atualização (Desenvolvimento)",
                     f"Modo de desenvolvimento detectado!\n\n"
@@ -258,16 +313,46 @@ class UpdateProgressWindow:
             current_exe = Path(sys.executable)
             old_exe = current_exe.with_suffix(".exe.old")
 
+            LOGGER.info(
+                "Finalizing update in FROZEN mode. Target current executable: %s",
+                current_exe,
+                extra={"category": "update"},
+            )
+
             # Rename current running executable first
             if old_exe.exists():
                 try:
+                    LOGGER.info(
+                        "Removing existing old backup file: %s",
+                        old_exe,
+                        extra={"category": "update"},
+                    )
                     old_exe.unlink()
-                except Exception:
+                except Exception as unlink_err:
                     import time
 
                     old_exe = current_exe.with_name(f"Z7_SentinelTray.exe.old.{int(time.time())}")
+                    LOGGER.warning(
+                        "Failed to remove %s: %s. Using alternate old backup path: %s",
+                        current_exe.with_suffix(".exe.old"),
+                        unlink_err,
+                        old_exe,
+                        extra={"category": "update"},
+                    )
 
+            LOGGER.info(
+                "Backing up current running executable: %s -> %s",
+                current_exe,
+                old_exe,
+                extra={"category": "update"},
+            )
             os.rename(current_exe, old_exe)
+            LOGGER.info(
+                "Installing newly downloaded executable: %s -> %s",
+                temp_dest,
+                current_exe,
+                extra={"category": "update"},
+            )
             os.rename(temp_dest, current_exe)
 
             messagebox.showinfo(
@@ -283,18 +368,30 @@ class UpdateProgressWindow:
             import ctypes
             if entrypoint._mutex_handle:
                 try:
+                    LOGGER.info("Releasing single-instance Mutex...", extra={"category": "update"})
                     ctypes.windll.kernel32.CloseHandle(entrypoint._mutex_handle)
                     entrypoint._mutex_handle = None
-                except Exception:
-                    pass
+                    LOGGER.info("Single-instance Mutex released successfully.", extra={"category": "update"})
+                except Exception as mutex_err:
+                    LOGGER.warning(
+                        "Failed to close single-instance Mutex handle: %s",
+                        mutex_err,
+                        extra={"category": "update"},
+                    )
 
             # Unlink PID file so the new instance starts cleanly
             try:
                 pid_path = entrypoint._pid_file_path()
                 if pid_path.exists():
+                    LOGGER.info("Removing PID file: %s", pid_path, extra={"category": "update"})
                     pid_path.unlink()
-            except Exception:
-                pass
+                    LOGGER.info("PID file removed successfully.", extra={"category": "update"})
+            except Exception as pid_err:
+                LOGGER.warning(
+                    "Failed to delete PID file: %s",
+                    pid_err,
+                    extra={"category": "update"},
+                )
 
             # Launch the new version of the executable
             import subprocess
@@ -307,9 +404,15 @@ class UpdateProgressWindow:
                 for key in list(env.keys()):
                     if key.startswith("_MEI"):
                         env.pop(key, None)
+                LOGGER.info(
+                    "Restarting application process: %s",
+                    sys.executable,
+                    extra={"category": "update"},
+                )
                 subprocess.Popen([sys.executable], env=env)
+                LOGGER.info("Restarted process spawned successfully.", extra={"category": "update"})
             except Exception as exc:
-                LOGGER.exception("Failed to restart application after update")
+                LOGGER.exception("Failed to restart application after update", extra={"category": "update"})
                 messagebox.showerror(
                     "Erro ao Reiniciar",
                     f"A atualização foi instalada com sucesso, mas ocorreu um erro ao reiniciar o aplicativo:\n{exc}",
@@ -318,11 +421,17 @@ class UpdateProgressWindow:
 
             # Exit the current process gracefully by quitting the Tkinter mainloop
             try:
+                LOGGER.info("Quitting old application Tkinter loop.", extra={"category": "update"})
                 self.parent.quit()
-            except Exception:
+            except Exception as quit_err:
+                LOGGER.warning(
+                    "Failed to quit Tkinter parent: %s. Falling back to sys.exit(0)",
+                    quit_err,
+                    extra={"category": "update"},
+                )
                 sys.exit(0)
         except Exception as exc:
-            LOGGER.exception("Failed to install update")
+            LOGGER.exception("Failed to install update", extra={"category": "update"})
             if temp_dest.exists():
                 temp_dest.unlink(missing_ok=True)
             messagebox.showerror(
@@ -361,14 +470,35 @@ def run_update_check(
     def do_check() -> None:
         if status:
             status.set_update_status("Verificando...")
+        LOGGER.info(
+            "Starting update check (on_startup=%s, current_version=%s)...",
+            on_startup,
+            current_version,
+            extra={"category": "update"},
+        )
         try:
             req = urllib.request.Request(
                 _REPO_API_URL, headers={"User-Agent": "Z7_SentinelTray-Updater"}
             )
+            LOGGER.debug(
+                "Requesting latest release metadata from GitHub API: %s",
+                _REPO_API_URL,
+                extra={"category": "update"},
+            )
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode("utf-8"))
 
+            LOGGER.info(
+                "Successfully fetched release metadata from GitHub API.",
+                extra={"category": "update"},
+            )
+
             if data.get("prerelease") or data.get("draft"):
+                LOGGER.info(
+                    "Latest release is a prerelease or draft, skipping: tag=%s",
+                    data.get("tag_name"),
+                    extra={"category": "update"},
+                )
                 if status:
                     status.set_update_status("Atualizado")
                 if not on_startup:
@@ -382,6 +512,10 @@ def run_update_check(
 
             tag_name: str = data.get("tag_name", "")
             if not tag_name:
+                LOGGER.warning(
+                    "Latest release metadata has no tag_name. Skipping update.",
+                    extra={"category": "update"},
+                )
                 if status:
                     status.set_update_status("Atualizado")
                 if not on_startup:
@@ -393,6 +527,12 @@ def run_update_check(
                     )
                 return
 
+            LOGGER.info(
+                "Latest release tag is %s. Checking assets for a compatible executable...",
+                tag_name,
+                extra={"category": "update"},
+            )
+
             # Find executable asset
             exe_asset: dict[str, Any] | None = None
             for asset in data.get("assets", []):
@@ -402,6 +542,11 @@ def run_update_check(
                     break
 
             if not exe_asset:
+                LOGGER.warning(
+                    "Compatible executable asset (.exe or 'Z7_SentinelTray') not found in release %s assets.",
+                    tag_name,
+                    extra={"category": "update"},
+                )
                 if status:
                     status.set_update_status(f"Atualização disponível ({tag_name})")
                 if not on_startup:
@@ -416,7 +561,20 @@ def run_update_check(
                     )
                 return
 
+            LOGGER.info(
+                "Found compatible asset: %s (size: %s bytes)",
+                exe_asset.get("name"),
+                exe_asset.get("size"),
+                extra={"category": "update"},
+            )
+
             if parse_version(tag_name) <= parse_version(current_version):
+                LOGGER.info(
+                    "Current version %s is up-to-date or newer than latest version %s. Skipping update.",
+                    current_version,
+                    tag_name,
+                    extra={"category": "update"},
+                )
                 if status:
                     status.set_update_status("Atualizado")
                 if not on_startup:
@@ -431,6 +589,12 @@ def run_update_check(
                 return
 
             # New version found!
+            LOGGER.info(
+                "New update found! Version: %s (current: %s).",
+                tag_name,
+                current_version,
+                extra={"category": "update"},
+            )
             if status:
                 status.set_update_status(f"Atualização disponível ({tag_name})")
 
@@ -445,14 +609,28 @@ def run_update_check(
                     f"Arquivo: {filename}\n\n"
                     f"Deseja realizar o download e atualizar agora?"
                 )
+                LOGGER.info(
+                    "Prompting user for update acceptance: version=%s",
+                    tag_name,
+                    extra={"category": "update"},
+                )
                 if messagebox.askyesno("Atualização Disponível", msg, parent=parent):
+                    LOGGER.info(
+                        "User accepted the update. Spawning UpdateProgressWindow...",
+                        extra={"category": "update"},
+                    )
                     dest_path = Path(sys.executable)
                     UpdateProgressWindow(parent, theme_state, download_url, dest_path)
+                else:
+                    LOGGER.info(
+                        "User declined the update prompt.",
+                        extra={"category": "update"},
+                    )
 
             parent.after(0, ask_user)
 
         except Exception as exc:
-            LOGGER.exception("Failed to check for updates")
+            LOGGER.exception("Failed to check for updates", extra={"category": "update"})
             if status:
                 status.set_update_status("Erro ao verificar")
             if not on_startup:
