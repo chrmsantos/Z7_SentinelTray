@@ -7,7 +7,9 @@ import logging
 import os
 import sys
 import threading
+import time
 import tkinter as tk
+import urllib.error
 import urllib.request
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -41,6 +43,36 @@ def parse_version(v_str: str) -> tuple[int, ...]:
         if digits:
             parts.append(int(digits))
     return tuple(parts)
+
+
+def check_write_permission(dest_path: Path) -> bool:
+    """Check if the directory containing the destination path is writable.
+
+    Args:
+        dest_path: The file path to verify write access for.
+
+    Returns:
+        True if the parent directory is writable, False otherwise.
+    """
+    try:
+        parent = dest_path.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        # Try creating a dummy file in the directory
+        temp_file = parent / f".write_test_{os.getpid()}"
+        temp_file.touch()
+        temp_file.unlink()
+        return True
+    except Exception:
+        return False
+
+
+def _get_target_path() -> Path:
+    """Return the final target executable path based on whether the app is frozen or not."""
+    is_frozen = getattr(sys, "frozen", False)
+    if not is_frozen:
+        from .config import get_project_root
+        return get_project_root() / "dist" / "Z7_SentinelTray.exe"
+    return Path(sys.executable)
 
 
 class UpdateProgressWindow:
@@ -213,6 +245,8 @@ class UpdateProgressWindow:
                 bytes_downloaded = 0
                 block_size = 16384
                 last_logged_quarter = 0
+                last_ui_update_time = 0.0
+                last_percent = -1
 
                 with open(temp_dest, "wb") as f:
                     while not self.cancel_event.is_set():
@@ -223,6 +257,9 @@ class UpdateProgressWindow:
                         bytes_downloaded += len(block)
 
                         percent = (bytes_downloaded / total_size) * 100 if total_size else 0
+                        current_percent_int = int(percent)
+                        now = time.time()
+
                         current_quarter = int(percent // 25) * 25
                         if current_quarter > last_logged_quarter and current_quarter <= 100:
                             LOGGER.info(
@@ -234,13 +271,16 @@ class UpdateProgressWindow:
                             )
                             last_logged_quarter = current_quarter
 
-                        speed_msg = (
-                            f"Baixando: {percent:.1f}% "
-                            f"({bytes_downloaded // 1024} KB / {total_size // 1024} KB)"
-                        )
-                        self.win.after(
-                            0, lambda p=percent, m=speed_msg: self._update_ui_state(p, m)
-                        )
+                        if current_percent_int != last_percent or (now - last_ui_update_time) >= 0.1:
+                            speed_msg = (
+                                f"Baixando: {percent:.1f}% "
+                                f"({bytes_downloaded // 1024} KB / {total_size // 1024} KB)"
+                            )
+                            self.win.after(
+                                0, lambda p=percent, m=speed_msg: self._update_ui_state(p, m)
+                            )
+                            last_percent = current_percent_int
+                            last_ui_update_time = now
 
             if self.cancel_event.is_set():
                 LOGGER.info(
@@ -276,14 +316,12 @@ class UpdateProgressWindow:
         try:
             is_frozen = getattr(sys, "frozen", False)
             if not is_frozen:
-                from .config import get_project_root
-
                 LOGGER.info(
                     "Finalizing update in DEVELOPMENT mode. Simulating update process...",
                     extra={"category": "update"},
                 )
                 # Dev mode target path simulation
-                dev_dest = get_project_root() / "dist" / "Z7_SentinelTray.exe"
+                dev_dest = self.dest_path
                 dev_dest.parent.mkdir(parents=True, exist_ok=True)
                 if dev_dest.exists():
                     LOGGER.info(
@@ -310,7 +348,7 @@ class UpdateProgressWindow:
                 self.win.destroy()
                 return
 
-            current_exe = Path(sys.executable)
+            current_exe = self.dest_path
             old_exe = current_exe.with_suffix(".exe.old")
 
             LOGGER.info(
@@ -353,83 +391,33 @@ class UpdateProgressWindow:
                 current_exe,
                 extra={"category": "update"},
             )
-            os.rename(temp_dest, current_exe)
+            try:
+                os.rename(temp_dest, current_exe)
+            except Exception as rename_exc:
+                LOGGER.error(
+                    "Failed to rename temp download to current exe. Restoring backup...",
+                    exc_info=True,
+                    extra={"category": "update"},
+                )
+                try:
+                    os.rename(old_exe, current_exe)
+                    LOGGER.info("Backup restored successfully.", extra={"category": "update"})
+                except Exception as restore_exc:
+                    LOGGER.critical(
+                        "CRITICAL: Failed to restore backup executable: %s",
+                        restore_exc,
+                        exc_info=True,
+                        extra={"category": "update"},
+                    )
+                raise rename_exc
 
             messagebox.showinfo(
                 "Atualização Concluída",
                 "A atualização foi baixada e instalada com sucesso!\n\n"
-                "O aplicativo será reiniciado automaticamente na nova versão.",
+                "O aplicativo será aberto na nova versão na próxima inicialização.",
                 parent=self.parent,
             )
             self.win.destroy()
-
-            # Release the single-instance mutex to allow the new process to start immediately
-            from . import entrypoint
-            import ctypes
-            if entrypoint._mutex_handle:
-                try:
-                    LOGGER.info("Releasing single-instance Mutex...", extra={"category": "update"})
-                    ctypes.windll.kernel32.CloseHandle(entrypoint._mutex_handle)
-                    entrypoint._mutex_handle = None
-                    LOGGER.info("Single-instance Mutex released successfully.", extra={"category": "update"})
-                except Exception as mutex_err:
-                    LOGGER.warning(
-                        "Failed to close single-instance Mutex handle: %s",
-                        mutex_err,
-                        extra={"category": "update"},
-                    )
-
-            # Unlink PID file so the new instance starts cleanly
-            try:
-                pid_path = entrypoint._pid_file_path()
-                if pid_path.exists():
-                    LOGGER.info("Removing PID file: %s", pid_path, extra={"category": "update"})
-                    pid_path.unlink()
-                    LOGGER.info("PID file removed successfully.", extra={"category": "update"})
-            except Exception as pid_err:
-                LOGGER.warning(
-                    "Failed to delete PID file: %s",
-                    pid_err,
-                    extra={"category": "update"},
-                )
-
-            # Launch the new version of the executable
-            import subprocess
-            try:
-                # Remove PyInstaller-specific environment variables so that the restarted
-                # process does not reuse the old process's extraction directory (_MEIPASS).
-                env = os.environ.copy()
-                if "_MEIPASS" in env:
-                    env.pop("_MEIPASS")
-                for key in list(env.keys()):
-                    if key.startswith("_MEI"):
-                        env.pop(key, None)
-                LOGGER.info(
-                    "Restarting application process: %s",
-                    sys.executable,
-                    extra={"category": "update"},
-                )
-                subprocess.Popen([sys.executable], env=env)
-                LOGGER.info("Restarted process spawned successfully.", extra={"category": "update"})
-            except Exception as exc:
-                LOGGER.exception("Failed to restart application after update", extra={"category": "update"})
-                messagebox.showerror(
-                    "Erro ao Reiniciar",
-                    f"A atualização foi instalada com sucesso, mas ocorreu um erro ao reiniciar o aplicativo:\n{exc}",
-                    parent=self.parent,
-                )
-
-            # Exit the current process gracefully by quitting the Tkinter mainloop
-            try:
-                LOGGER.info("Quitting old application Tkinter loop.", extra={"category": "update"})
-                self.parent.quit()
-            except Exception as quit_err:
-                LOGGER.warning(
-                    "Failed to quit Tkinter parent: %s. Falling back to sys.exit(0)",
-                    quit_err,
-                    extra={"category": "update"},
-                )
-                sys.exit(0)
         except Exception as exc:
             LOGGER.exception("Failed to install update", extra={"category": "update"})
             if temp_dest.exists():
@@ -595,6 +583,29 @@ def run_update_check(
                 current_version,
                 extra={"category": "update"},
             )
+
+            dest_path = _get_target_path()
+            if not check_write_permission(dest_path):
+                LOGGER.warning(
+                    "Write permission denied in installation directory: %s. Cannot install update.",
+                    dest_path.parent,
+                    extra={"category": "update"},
+                )
+                if status:
+                    status.set_update_status(f"Sem permissão de gravação ({tag_name})")
+                if not on_startup:
+                    parent.after(
+                        0,
+                        lambda: messagebox.showwarning(
+                            "Permissão Negada",
+                            f"Uma nova versão ({tag_name}) está disponível, mas o aplicativo não possui "
+                            f"permissão de gravação no diretório de instalação:\n{dest_path.parent}\n\n"
+                            f"Por favor, execute o aplicativo como administrador para atualizar.",
+                            parent=parent,
+                        ),
+                    )
+                return
+
             if status:
                 status.set_update_status(f"Atualização disponível ({tag_name})")
 
@@ -619,7 +630,6 @@ def run_update_check(
                         "User accepted the update. Spawning UpdateProgressWindow...",
                         extra={"category": "update"},
                     )
-                    dest_path = Path(sys.executable)
                     UpdateProgressWindow(parent, theme_state, download_url, dest_path)
                 else:
                     LOGGER.info(
@@ -630,7 +640,24 @@ def run_update_check(
             parent.after(0, ask_user)
 
         except Exception as exc:
-            LOGGER.exception("Failed to check for updates", extra={"category": "update"})
+            # Check if this is a common network error to avoid tracebacks in logs when offline.
+            is_network_err = False
+            if isinstance(exc, urllib.error.URLError):
+                is_network_err = True
+            elif isinstance(exc, (TimeoutError, ConnectionError)):
+                is_network_err = True
+            elif hasattr(exc, "reason") and ("getaddrinfo failed" in str(exc) or "timed out" in str(exc)):
+                is_network_err = True
+
+            if is_network_err:
+                LOGGER.warning(
+                    "Failed to check for updates (network offline/timeout): %s",
+                    exc,
+                    extra={"category": "update"},
+                )
+            else:
+                LOGGER.exception("Failed to check for updates due to unexpected error", extra={"category": "update"})
+
             if status:
                 status.set_update_status("Erro ao verificar")
             if not on_startup:

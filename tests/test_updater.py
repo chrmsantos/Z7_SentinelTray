@@ -272,7 +272,7 @@ class TestUpdateProcess(unittest.TestCase):
     def test_update_download_success_frozen_mode(
         self, mock_popen, mock_close_handle, mock_ttk, mock_tk, mock_msgbox, mock_urlopen
     ) -> None:
-        """Test complete update installation and restart flow in frozen (production) mode."""
+        """Test complete update installation flow (without auto-restart) in frozen (production) mode."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             temp_exe = tmp_path / "Z7_SentinelTray.exe"
@@ -305,23 +305,18 @@ class TestUpdateProcess(unittest.TestCase):
                 assert old_exe.exists()
                 assert old_exe.read_text(encoding="utf-8") == "original_content"
 
-                # Verify PID file unlinked
-                assert not pid_file.exists()
+                # Verify PID file remains intact since we do not auto-restart/quit
+                assert pid_file.exists()
 
-                # Verify Mutex closed
-                mock_close_handle.assert_called_once_with(12345)
-                assert entrypoint._mutex_handle is None
+                # Verify Mutex was NOT closed
+                mock_close_handle.assert_not_called()
+                assert entrypoint._mutex_handle == 12345
 
-                # Verify process restarted with cleaned environment
-                mock_popen.assert_called_once()
-                args, kwargs = mock_popen.call_args
-                assert args[0] == [str(temp_exe)]
-                clean_env = kwargs["env"]
-                assert "_MEIPASS" not in clean_env
-                assert clean_env["OTHER_VAR"] == "keep_this"
+                # Verify process was NOT restarted
+                mock_popen.assert_not_called()
 
-                # Verify Tkinter parent quit called
-                parent.quit.assert_called_once()
+                # Verify Tkinter parent quit was NOT called
+                parent.quit.assert_not_called()
 
     @patch("z7_sentineltray.updater.urllib.request.urlopen")
     @patch("z7_sentineltray.updater.messagebox")
@@ -408,3 +403,107 @@ class TestUpdateProcess(unittest.TestCase):
         # Manual check: displays error popup
         run_update_check(parent, theme, "6.1.5", on_startup=False, status=status)
         mock_msgbox.showerror.assert_called_once()
+
+    def test_check_write_permission(self) -> None:
+        """Test check_write_permission helper under writable and read-only directory scenarios."""
+        from z7_sentineltray.updater import check_write_permission
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            temp_file = tmp_path / "test.exe"
+
+            # Should return True in a writable directory
+            assert check_write_permission(temp_file)
+
+        # Test permission denied by mocking permission error
+        with patch("pathlib.Path.touch", side_effect=PermissionError("Permission denied")):
+            assert not check_write_permission(Path("dummy_path.exe"))
+
+    @patch("z7_sentineltray.updater.urllib.request.urlopen")
+    @patch("z7_sentineltray.updater.messagebox")
+    @patch("z7_sentineltray.updater.check_write_permission")
+    @patch("z7_sentineltray.updater.threading.Thread", SynchronousThread)
+    def test_update_check_write_permission_denied(self, mock_check_write, mock_msgbox, mock_urlopen) -> None:
+        """Test that update check handles write permission denial without prompting to download."""
+        release_data = {
+            "tag_name": "v6.2.0",
+            "prerelease": False,
+            "draft": False,
+            "assets": [
+                {"name": "Z7_SentinelTray.exe", "browser_download_url": "http://example.com/download"}
+            ]
+        }
+        mock_urlopen.return_value = MockResponse(json.dumps(release_data).encode("utf-8"))
+        mock_check_write.return_value = False  # Simulate write permission denied
+
+        status = StatusStore()
+        parent = MagicMock()
+        parent.after.side_effect = lambda delay, func: func()
+        theme = DummyTheme()
+
+        run_update_check(parent, theme, "6.1.5", on_startup=False, status=status)
+
+        assert status.snapshot().update_status == "Sem permissão de gravação (v6.2.0)"
+        mock_msgbox.showwarning.assert_called_once_with(
+            "Permissão Negada",
+            unittest.mock.ANY,
+            parent=parent,
+        )
+        mock_msgbox.askyesno.assert_not_called()
+
+    @patch("z7_sentineltray.updater.urllib.request.urlopen")
+    @patch("z7_sentineltray.updater.messagebox")
+    @patch("z7_sentineltray.updater.tk")
+    @patch("z7_sentineltray.updater.ttk")
+    @patch("z7_sentineltray.updater.os.rename")
+    @patch("z7_sentineltray.updater.threading.Thread", SynchronousThread)
+    def test_update_download_rename_fails_and_restores(
+        self, mock_rename, mock_ttk, mock_tk, mock_msgbox, mock_urlopen
+    ) -> None:
+        """Test that if renaming the new executable fails, the backup is restored."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            temp_exe = tmp_path / "Z7_SentinelTray.exe"
+            temp_exe.write_text("original_content", encoding="utf-8")
+
+            mock_urlopen.return_value = MockResponse(b"updated_frozen_exe_payload", {"Content-Length": "26"})
+
+            parent = MagicMock()
+            theme = DummyTheme()
+            mock_tk.Toplevel.return_value.after.side_effect = lambda delay, func: func()
+
+            # Mock rename side effect:
+            # 1. First rename (backup current to old) succeeds.
+            # 2. Second rename (temp to current) fails with PermissionError.
+            # 3. Third rename (restore old to current) succeeds.
+            calls = []
+            def side_effect(src, dst):
+                calls.append((src, dst))
+                if len(calls) == 2:
+                    raise PermissionError("Access denied")
+                return None
+
+            mock_rename.side_effect = side_effect
+
+            with patch("sys.frozen", True, create=True), \
+                 patch("z7_sentineltray.updater.sys.executable", str(temp_exe)):
+
+                window = UpdateProgressWindow(parent, theme, "http://example.com/download", temp_exe)
+
+                # Verify that rename failed, but backup restore was triggered
+                # First call: rename current_exe -> old_exe
+                # Second call: rename temp_dest -> current_exe (which fails)
+                # Third call: rename old_exe -> current_exe (restore)
+                assert len(calls) == 3
+                assert Path(calls[0][0]) == Path(temp_exe)
+                assert Path(calls[0][1]) == Path(temp_exe).with_suffix(".exe.old")
+                assert Path(calls[1][1]) == Path(temp_exe)
+                assert Path(calls[2][0]) == Path(temp_exe).with_suffix(".exe.old")
+                assert Path(calls[2][1]) == Path(temp_exe)
+
+                mock_msgbox.showerror.assert_called_with(
+                    "Erro na Instalação",
+                    unittest.mock.ANY,
+                    parent=parent,
+                )
+                window.win.destroy.assert_called_once()

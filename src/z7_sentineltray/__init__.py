@@ -1,6 +1,6 @@
 """Z7_SentinelTray package."""
 
 __author__ = "CMS"
-__version__ = "6.2.4"
-__version_label__ = "6.2.4"
-__release_date__ = "02-06-2026"
+__version__ = "6.2.5"
+__version_label__ = "6.2.5"
+__release_date__ = "03-06-2026"
