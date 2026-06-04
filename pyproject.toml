@@ -17,7 +17,7 @@ dev = [
     "pre-commit>=3.7.0",
     "pytest>=9.0.3",
     "pytest-cov>=5.0.0",
-    "ruff>=0.15.12",
+    "ruff>=0.15.15",
 ]
 
 [tool.pytest.ini_options]
