@@ -1,4 +1,4 @@
-﻿# Z7_SentinelTray — Configuração.
+# Z7_SentinelTray — Configuração.
 # Copie este arquivo para config.local.yaml e preencha com seus valores.
 # NÃO armazene smtp_password aqui — deixe em branco e informe na primeira
 # inicialização; a senha será salva criptografada em smtp_password_<n>.dpapi.
@@ -44,7 +44,7 @@ monitors:
 
     # Lista de endereços de e-mail que receberão os alertas.
     # Pode conter múltiplos destinatários: ['dest1@exemplo.com', 'dest2@exemplo.com']
-    to_addresses: ['chrmsantos@proton.me']
+    to_addresses: ['chrmsantos@gmail.com']
 
     # Habilita criptografia TLS/STARTTLS na conexão SMTP.
     # Recomendado: true. Desative apenas em servidores internos sem suporte a TLS.

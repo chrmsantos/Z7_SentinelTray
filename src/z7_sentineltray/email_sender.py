@@ -7,7 +7,7 @@ import logging
 import smtplib
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from pathlib import Path
@@ -363,6 +363,8 @@ class QueueingEmailSender(EmailSender):
 
     sender: SmtpEmailSender
     queue: DiskEmailQueue
+    cumulative_sent: int = field(default=0, init=False)
+    cumulative_failed: int = field(default=0, init=False)
 
     def send(self, message: str) -> None:
         """Drain the queue, then send *message*; queue on transient failure."""
@@ -375,6 +377,7 @@ class QueueingEmailSender(EmailSender):
 
         try:
             self.sender.send(message)
+            self.cumulative_sent += 1
         except EmailAuthError:
             raise
         except Exception as exc:
@@ -385,6 +388,7 @@ class QueueingEmailSender(EmailSender):
             )
             try:
                 self.queue.enqueue(message)
+                self.cumulative_failed += 1
             except Exception:
                 LOGGER.exception(
                     "Failed to enqueue message after send failure",
@@ -395,11 +399,21 @@ class QueueingEmailSender(EmailSender):
 
     def drain(self) -> QueueStats:
         """Drain the underlying queue and return stats."""
-        return self.queue.drain(self.sender.send)
+        stats = self.queue.drain(self.sender.send)
+        self.cumulative_sent += stats.sent
+        self.cumulative_failed += stats.failed
+        return stats
 
     def get_queue_stats(self) -> QueueStats:
         """Return queue stats without sending."""
-        return self.queue.get_stats()
+        stats = self.queue.get_stats()
+        return QueueStats(
+            queued=stats.queued,
+            sent=self.cumulative_sent,
+            failed=self.cumulative_failed,
+            deferred=stats.deferred,
+            oldest_age_seconds=stats.oldest_age_seconds,
+        )
 
 
 def build_sender(

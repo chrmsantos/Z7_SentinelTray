@@ -280,6 +280,7 @@ class Notifier:
 
         Thread(target=_fetch_commit_hash, daemon=True, name="commit-hash").start()
         _check_smtp_health(self.config)
+        self._update_queue_stats()
 
     def _reset_components(self) -> None:
         for monitor in self._monitors:
@@ -299,6 +300,7 @@ class Notifier:
             monitor.email_disabled = False
             monitor.failure_count = 0
             monitor.breaker_until = 0.0
+        self._update_queue_stats()
 
     def _build_last_sent_map(
         self, history: list[dict[str, str]], monitor_key: str | None
@@ -413,6 +415,8 @@ class Notifier:
                     exc,
                     extra={"category": category},
                 )
+            finally:
+                self._update_queue_stats()
 
         return sent_any
 
@@ -904,7 +908,7 @@ class Notifier:
         except Exception as exc:
             LOGGER.warning("Disk check failed: %s", exc, extra={"category": "error"})
 
-    def _drain_queues(self) -> None:
+    def _update_queue_stats(self) -> None:
         total = {
             "queued": 0,
             "sent": 0,
@@ -916,7 +920,7 @@ class Notifier:
             sender = monitor.sender
             if isinstance(sender, QueueingEmailSender):
                 try:
-                    stats = sender.drain()
+                    stats = sender.get_queue_stats()
                     total["queued"] += stats.queued
                     total["sent"] += stats.sent
                     total["failed"] += stats.failed
@@ -924,6 +928,21 @@ class Notifier:
                     total["oldest_age_seconds"] = max(
                         total["oldest_age_seconds"], stats.oldest_age_seconds
                     )
+                except Exception as exc:
+                    LOGGER.warning(
+                        "Failed to get email queue stats: %s",
+                        exc,
+                        extra={"category": "send"},
+                    )
+        self._queue_stats = total
+        self.status.set_email_queue_stats(total)
+
+    def _drain_queues(self) -> None:
+        for monitor in self._monitors:
+            sender = monitor.sender
+            if isinstance(sender, QueueingEmailSender):
+                try:
+                    sender.drain()
                 except EmailAuthError as exc:
                     monitor.email_disabled = True
                     self.status.set_last_error(
@@ -935,8 +954,7 @@ class Notifier:
                         exc,
                         extra={"category": "send"},
                     )
-        self._queue_stats = total
-        self.status.set_email_queue_stats(total)
+        self._update_queue_stats()
 
     def run_loop(  # noqa: C901
         self,
@@ -974,7 +992,7 @@ class Notifier:
             )
         try:
             LOGGER.info(
-                "Z7_SentinelTray started (beta %s, %s)",
+                "Z7_SentinelTray started (%s, %s)",
                 self._app_version,
                 self._release_date,
                 extra={"category": "startup"},
