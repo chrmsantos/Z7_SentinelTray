@@ -215,6 +215,31 @@ class TestUpdateProcess(unittest.TestCase):
 
     @patch("z7_sentineltray.updater.urllib.request.urlopen")
     @patch("z7_sentineltray.updater.messagebox")
+    @patch("z7_sentineltray.updater.threading.Thread", SynchronousThread)
+    def test_update_check_available_on_startup(self, mock_msgbox, mock_urlopen) -> None:
+        """Test update check when update is available and on_startup is True (no prompt)."""
+        release_data = {
+            "tag_name": "v6.2.0",
+            "prerelease": False,
+            "draft": False,
+            "assets": [
+                {"name": "Z7_SentinelTray.exe", "browser_download_url": "http://example.com/download"}
+            ]
+        }
+        mock_urlopen.return_value = MockResponse(json.dumps(release_data).encode("utf-8"))
+
+        status = StatusStore()
+        parent = MagicMock()
+        parent.after.side_effect = lambda delay, func: func()
+        theme = DummyTheme()
+
+        run_update_check(parent, theme, "6.1.5", on_startup=True, status=status)
+
+        assert status.snapshot().update_status == "Atualização disponível (v6.2.0)"
+        mock_msgbox.askyesno.assert_not_called()
+
+    @patch("z7_sentineltray.updater.urllib.request.urlopen")
+    @patch("z7_sentineltray.updater.messagebox")
     @patch("z7_sentineltray.updater.tk")
     @patch("z7_sentineltray.updater.ttk")
     @patch("z7_sentineltray.updater.threading.Thread", SynchronousThread)
@@ -305,18 +330,23 @@ class TestUpdateProcess(unittest.TestCase):
                 assert old_exe.exists()
                 assert old_exe.read_text(encoding="utf-8") == "original_content"
 
-                # Verify PID file remains intact since we do not auto-restart/quit
-                assert pid_file.exists()
+                # Verify PID file unlinked
+                assert not pid_file.exists()
 
-                # Verify Mutex was NOT closed
-                mock_close_handle.assert_not_called()
-                assert entrypoint._mutex_handle == 12345
+                # Verify Mutex closed
+                mock_close_handle.assert_called_once_with(12345)
+                assert entrypoint._mutex_handle is None
 
-                # Verify process was NOT restarted
-                mock_popen.assert_not_called()
+                # Verify process restarted with cleaned environment
+                mock_popen.assert_called_once()
+                args, kwargs = mock_popen.call_args
+                assert args[0] == [str(temp_exe)]
+                clean_env = kwargs["env"]
+                assert "_MEIPASS" not in clean_env
+                assert clean_env["OTHER_VAR"] == "keep_this"
 
-                # Verify Tkinter parent quit was NOT called
-                parent.quit.assert_not_called()
+                # Verify Tkinter parent quit called
+                parent.quit.assert_called_once()
 
     @patch("z7_sentineltray.updater.urllib.request.urlopen")
     @patch("z7_sentineltray.updater.messagebox")

@@ -414,10 +414,78 @@ class UpdateProgressWindow:
             messagebox.showinfo(
                 "Atualização Concluída",
                 "A atualização foi baixada e instalada com sucesso!\n\n"
-                "O aplicativo será aberto na nova versão na próxima inicialização.",
+                "O aplicativo será reiniciado automaticamente na nova versão.",
                 parent=self.parent,
             )
             self.win.destroy()
+
+            # Release the single-instance mutex to allow the new process to start immediately
+            from . import entrypoint
+            import ctypes
+            if entrypoint._mutex_handle:
+                try:
+                    LOGGER.info("Releasing single-instance Mutex...", extra={"category": "update"})
+                    ctypes.windll.kernel32.CloseHandle(entrypoint._mutex_handle)
+                    entrypoint._mutex_handle = None
+                    LOGGER.info("Single-instance Mutex released successfully.", extra={"category": "update"})
+                except Exception as mutex_err:
+                    LOGGER.warning(
+                        "Failed to close single-instance Mutex handle: %s",
+                        mutex_err,
+                        extra={"category": "update"},
+                    )
+
+            # Unlink PID file so the new instance starts cleanly
+            try:
+                pid_path = entrypoint._pid_file_path()
+                if pid_path.exists():
+                    LOGGER.info("Removing PID file: %s", pid_path, extra={"category": "update"})
+                    pid_path.unlink()
+                    LOGGER.info("PID file removed successfully.", extra={"category": "update"})
+            except Exception as pid_err:
+                LOGGER.warning(
+                    "Failed to delete PID file: %s",
+                    pid_err,
+                    extra={"category": "update"},
+                )
+
+            # Launch the new version of the executable
+            import subprocess
+            try:
+                # Remove PyInstaller-specific environment variables so that the restarted
+                # process does not reuse the old process's extraction directory (_MEIPASS).
+                env = os.environ.copy()
+                if "_MEIPASS" in env:
+                    env.pop("_MEIPASS")
+                for key in list(env.keys()):
+                    if key.startswith("_MEI"):
+                        env.pop(key, None)
+                LOGGER.info(
+                    "Restarting application process: %s",
+                    current_exe,
+                    extra={"category": "update"},
+                )
+                subprocess.Popen([str(current_exe)], env=env)
+                LOGGER.info("Restarted process spawned successfully.", extra={"category": "update"})
+            except Exception as exc:
+                LOGGER.exception("Failed to restart application after update", extra={"category": "update"})
+                messagebox.showerror(
+                    "Erro ao Reiniciar",
+                    f"A atualização foi instalada com sucesso, mas ocorreu um erro ao reiniciar o aplicativo:\n{exc}",
+                    parent=self.parent,
+                )
+
+            # Exit the current process gracefully by quitting the Tkinter mainloop
+            try:
+                LOGGER.info("Quitting old application Tkinter loop.", extra={"category": "update"})
+                self.parent.quit()
+            except Exception as quit_err:
+                LOGGER.warning(
+                    "Failed to quit Tkinter parent: %s. Falling back to sys.exit(0)",
+                    quit_err,
+                    extra={"category": "update"},
+                )
+                sys.exit(0)
         except Exception as exc:
             LOGGER.exception("Failed to install update", extra={"category": "update"})
             if temp_dest.exists():
@@ -637,7 +705,8 @@ def run_update_check(
                         extra={"category": "update"},
                     )
 
-            parent.after(0, ask_user)
+            if not on_startup:
+                parent.after(0, ask_user)
 
         except Exception as exc:
             # Check if this is a common network error to avoid tracebacks in logs when offline.

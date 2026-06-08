@@ -2172,6 +2172,13 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
     # ── Show window on startup ────────────────────────────────────────────────
     root.after(0, window.show)
 
+    # ── Check for updates on startup ──────────────────────────────────────────
+    def _startup_update_check() -> None:
+        from . import __version__
+        run_update_check(root, theme, __version__, on_startup=True, status=status)
+
+    root.after(1000, _startup_update_check)
+
     # ── Watchdog thread ───────────────────────────────────────────────────────
     def _watchdog() -> None:
         def _maybe_reload() -> None:
