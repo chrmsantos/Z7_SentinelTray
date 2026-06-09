@@ -73,7 +73,7 @@ monitors:
 # Intervalo (em segundos) entre cada varredura nas janelas monitoradas.
 # Valores menores tornam a detecção mais rápida, mas aumentam o uso de CPU.
 # Recomendado: entre 30 e 120 segundos para uso geral.
-poll_interval_seconds: 30
+poll_interval_seconds: 60
 
 # Intervalo (em segundos) entre verificações de "saúde" (healthcheck) do sistema.
 # O healthcheck registra um log periódico confirmando que o Z7_SentinelTray está ativo.

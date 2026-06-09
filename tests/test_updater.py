@@ -330,23 +330,26 @@ class TestUpdateProcess(unittest.TestCase):
                 assert old_exe.exists()
                 assert old_exe.read_text(encoding="utf-8") == "original_content"
 
-                # Verify PID file unlinked
-                assert not pid_file.exists()
+                # Verify PID file still exists (not unlinked)
+                assert pid_file.exists()
 
-                # Verify Mutex closed
-                mock_close_handle.assert_called_once_with(12345)
-                assert entrypoint._mutex_handle is None
+                # Verify Mutex NOT closed
+                mock_close_handle.assert_not_called()
+                assert entrypoint._mutex_handle == 12345
 
-                # Verify process restarted with cleaned environment
-                mock_popen.assert_called_once()
-                args, kwargs = mock_popen.call_args
-                assert args[0] == [str(temp_exe)]
-                clean_env = kwargs["env"]
-                assert "_MEIPASS" not in clean_env
-                assert clean_env["OTHER_VAR"] == "keep_this"
+                # Verify process NOT restarted
+                mock_popen.assert_not_called()
 
-                # Verify Tkinter parent quit called
-                parent.quit.assert_called_once()
+                # Verify Tkinter parent quit NOT called
+                parent.quit.assert_not_called()
+
+                # Verify showinfo called with new success message
+                mock_msgbox.showinfo.assert_called_once_with(
+                    "Atualização Concluída",
+                    "A atualização foi baixada e instalada com sucesso!\n\n"
+                    "A nova versão estará ativa na próxima inicialização do aplicativo.",
+                    parent=parent,
+                )
 
     @patch("z7_sentineltray.updater.urllib.request.urlopen")
     @patch("z7_sentineltray.updater.messagebox")

@@ -513,10 +513,6 @@ def main() -> int:  # noqa: C901
     args = [arg for arg in sys.argv[1:] if arg]
     _reject_extra_args(args)
 
-    from .splash import SplashScreen
-
-    splash = SplashScreen()
-
     local_path = get_user_data_dir() / "config.local.yaml"
     config = None
     config_error_message = None
@@ -524,19 +520,15 @@ def main() -> int:  # noqa: C901
         _ensure_windows()
         _run_startup_integrity_checks(local_path)
         if not local_path.exists():
-            splash.close()
             _first_run_gui_setup(local_path)
         _ensure_local_override(local_path)
         config = load_config(str(local_path))
         missing_passwords = _missing_smtp_passwords(config)
         if missing_passwords:
-            splash.close()
             _prompt_smtp_passwords(missing_passwords)
             config = load_config(str(local_path))
     except Exception as exc:
         config_error_message = _handle_config_error(local_path, exc)
-
-    splash.close()
 
     try:
         if config_error_message is not None:
