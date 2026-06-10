@@ -40,6 +40,7 @@ _CATEGORY_LABEL: dict[str, str] = {
     "Error": "Erro",
     "Status": "Status",
     "Verificação": "Verificação",
+    "Aviso": "Aviso",
 }
 
 
@@ -52,6 +53,8 @@ def _build_subject(subject: str, category: str) -> str:
         return "Z7_SentinelTray — Status do sistema"
     if category == "Verificação":
         return "Z7_SentinelTray — Verificação Manual"
+    if category == "Aviso":
+        return "Z7_SentinelTray — Aviso de Segurança"
     base = (subject or "").strip()
     if base:
         cleaned = base
@@ -83,6 +86,9 @@ def _build_body(message: str) -> tuple[str, str]:
     elif text.lower().startswith("verificação:") or text.lower().startswith("verificacao:"):
         category = "Verificação"
         details = text.split(":", 1)[1].strip() or "Verificação realizada."
+    elif text.lower().startswith("aviso:"):
+        category = "Aviso"
+        details = text.split(":", 1)[1].strip() or "Aviso de segurança."
 
     if not details:
         details = "Sem detalhes adicionais."

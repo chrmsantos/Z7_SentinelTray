@@ -198,3 +198,53 @@ def test_manual_scan_bypasses_pause(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     notifier.run_loop(stop_event, manual_scan_event)
 
     assert len(scan_calls) == 1
+
+
+class _RecordingSender:
+    def __init__(self) -> None:
+        self.sent_messages: list[str] = []
+
+    def send(self, message: str) -> None:
+        self.sent_messages.append(message)
+
+
+def test_user_active_warning_email_sent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Warning email should be sent exactly once when entering user-active paused state."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    sender = _RecordingSender()
+    notifier._sender = sender  # type: ignore[assignment]
+
+    # We mock get_idle_seconds to change over time
+    idle_values = [10.0, 10.0, 200.0, 10.0]  # Active, Active, Idle, Active
+
+    def get_next_idle() -> float:
+        if idle_values:
+            return idle_values.pop(0)
+        return 200.0
+
+    monkeypatch.setattr(app, "get_idle_seconds", get_next_idle)
+
+    stop_event = Event()
+
+    # We want to run the loop for 4 iterations.
+    # Since _update_telemetry is called once at startup, we wait for 5 calls in total.
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        if telemetry_calls >= 5:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[assignment]
+    notifier.scan_once = lambda: None  # type: ignore[assignment]
+
+    notifier.run_loop(stop_event)
+
+    assert len(sender.sent_messages) == 2
+    assert "aviso:" in sender.sent_messages[0]
+    assert "segurança contra acesso não autorizado" in sender.sent_messages[0]
+    assert "aviso:" in sender.sent_messages[1]

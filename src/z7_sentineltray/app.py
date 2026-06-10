@@ -269,6 +269,7 @@ class Notifier:
         }
         self._sender: EmailSender | None = None
         self._commit_hash_ready: Event = Event()
+        self._was_paused_by_user_active = False
 
         def _fetch_commit_hash() -> None:
             try:
@@ -790,6 +791,33 @@ class Notifier:
             error_message = f"erro: falha ao enviar teste de inicialização: {exc}"
             self._handle_error(error_message)
 
+    def _send_user_active_warning(self) -> None:
+        """Send a warning email when monitoring is put on hold due to user activity."""
+        message = (
+            "aviso: O monitoramento foi posto em espera por atividade do usuário "
+            "(segurança contra acesso não autorizado)"
+        )
+        try:
+            sent_any = False
+            sent_direct = False
+            queued_any = False
+            for monitor in self._monitors:
+                if self._send_message(monitor, message, category="send", force_send=True):
+                    sent_any = True
+                    if monitor.last_send_queued:
+                        queued_any = True
+                    else:
+                        sent_direct = True
+            if sent_any or self.config.log_only_mode:
+                self.status.set_last_send(_now_iso())
+                if sent_direct:
+                    LOGGER.info("Sent user active warning message", extra={"category": "send"})
+                elif queued_any:
+                    LOGGER.info("Queued user active warning message", extra={"category": "send"})
+        except Exception as exc:
+            error_message = f"erro: falha ao enviar aviso de atividade do usuário: {exc}"
+            self._handle_error(error_message)
+
     def _send_healthcheck(self) -> None:
         uptime_seconds = int((datetime.now(UTC) - self._started_at).total_seconds())
         self.status.set_uptime_seconds(uptime_seconds)
@@ -1056,18 +1084,23 @@ class Notifier:
                             extra={"category": "perf"},
                         )
                         self._next_queue_drain = now + 30
-                    if (
+                    is_paused_by_user_active = (
                         not is_manual
                         and self.config.pause_on_user_active
                         and get_idle_seconds() < self.config.pause_idle_threshold_seconds
-                    ):
+                    )
+                    if is_paused_by_user_active:
                         self.status.set_last_scan_result("PAUSADO (usuário ativo)")
                         LOGGER.debug(
                             "Scan skipped: user is active (idle < %ss)",
                             self.config.pause_idle_threshold_seconds,
                             extra={"category": "scan"},
                         )
+                        if not self._was_paused_by_user_active:
+                            self._was_paused_by_user_active = True
+                            self._send_user_active_warning()
                     else:
+                        self._was_paused_by_user_active = False
                         self.scan_once()
                         if self._last_scan_error:
                             error_count += 1
