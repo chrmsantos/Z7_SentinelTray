@@ -269,7 +269,7 @@ class Notifier:
         }
         self._sender: EmailSender | None = None
         self._commit_hash_ready: Event = Event()
-        self._was_paused_by_user_active = False
+        self._was_paused_by_user_active = True
 
         def _fetch_commit_hash() -> None:
             try:

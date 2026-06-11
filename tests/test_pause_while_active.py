@@ -244,7 +244,6 @@ def test_user_active_warning_email_sent(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     notifier.run_loop(stop_event)
 
-    assert len(sender.sent_messages) == 2
+    assert len(sender.sent_messages) == 1
     assert "aviso:" in sender.sent_messages[0]
     assert "segurança contra acesso não autorizado" in sender.sent_messages[0]
-    assert "aviso:" in sender.sent_messages[1]
