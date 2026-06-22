@@ -1,4 +1,4 @@
-﻿"""Generate assets/icon.ico -- green eye icon for Z7_SentinelTray.
+"""Generate assets/icon.ico -- green eye icon for Z7_SentinelTray.
 
 Run from the repository root:
     python scripts/generate_icon.py
@@ -36,38 +36,13 @@ def _draw_iris_fibers(
 
 
 def _make_icon(size: int) -> Image.Image:
-    """Render a green eye icon on a dark rounded background at *size* x *size*."""
-    scale = 6                       # 6× supersampling for smooth anti-aliased edges
+    """Render a green eye icon on a transparent background at *size* x *size*."""
+    scale = 12                      # 12× supersampling for smooth anti-aliased edges
     s = size * scale
     cx, cy = s // 2, s // 2
 
-    # 1. Background: dark rounded square
+    # Start with a transparent canvas
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    corner_r = int(s * 0.22)
-    ImageDraw.Draw(img).rounded_rectangle(
-        [0, 0, s - 1, s - 1], radius=corner_r, fill=_BG_DARK
-    )
-
-    # Subtle centre-bright vignette (lighter centre, not edges)
-    vignette = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    for i in range(10):
-        vr = int(s * (0.55 - i * 0.04))
-        if vr <= 0:
-            break
-        ImageDraw.Draw(vignette).ellipse(
-            [cx - vr, cy - vr, cx + vr, cy + vr],
-            fill=(255, 255, 255, 4),
-        )
-    img = Image.alpha_composite(img, vignette)
-
-    # Top specular sheen
-    sheen = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    sw_sh, sh_sh = int(s * 0.68), int(s * 0.30)
-    ImageDraw.Draw(sheen).ellipse(
-        [cx - sw_sh // 2, -sh_sh // 2, cx + sw_sh // 2, sh_sh // 2 + int(s * 0.05)],
-        fill=(255, 255, 255, 16),
-    )
-    img = Image.alpha_composite(img, sheen)
 
     # 2. Two-layer glow: wide cool haze + tight warm core
     for glow_color, radius_base, step, alpha_base, blur_factor in (
@@ -221,13 +196,14 @@ def _make_icon(size: int) -> Image.Image:
 
 
 def main():
-    sizes = [16, 24, 32, 48, 64, 128, 256]
+    sizes = [16, 24, 32, 48, 64, 128, 256, 512]
 
     assets_dir = Path(__file__).resolve().parents[1] / "assets"
     assets_dir.mkdir(exist_ok=True)
 
     ico_path = assets_dir / "icon.ico"
-    png_path = assets_dir / "icon_256.png"
+    png_256_path = assets_dir / "icon_256.png"
+    png_512_path = assets_dir / "icon_512.png"
 
     frames = [_make_icon(sz) for sz in sizes]
 
@@ -239,8 +215,11 @@ def main():
     )
     print(f"[OK] {ico_path}")
 
-    frames[-1].save(png_path, format="PNG")
-    print(f"[OK] {png_path}")
+    frames[sizes.index(256)].save(png_256_path, format="PNG")
+    print(f"[OK] {png_256_path}")
+
+    frames[sizes.index(512)].save(png_512_path, format="PNG")
+    print(f"[OK] {png_512_path}")
 
 
 if __name__ == "__main__":
