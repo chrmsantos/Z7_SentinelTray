@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from sentineltray.app import Notifier
-from sentineltray.config import AppConfig, EmailConfig, MonitorConfig
-from sentineltray.detector import WindowTextDetector
-from sentineltray.email_sender import EmailSender
-from sentineltray.status import StatusStore
+from z7_sentineltray.app import Notifier
+from z7_sentineltray.config import AppConfig, EmailConfig, MonitorConfig
+from z7_sentineltray.detector import WindowTextDetector
+from z7_sentineltray.email_sender import EmailSender
+from z7_sentineltray.status import StatusStore
 
 
 def _config() -> AppConfig:
@@ -19,10 +19,9 @@ def _config() -> AppConfig:
         to_addresses=[],
         use_tls=True,
         timeout_seconds=10,
-        subject="SentinelTray",
+        subject="Z7_SentinelTray",
         retry_attempts=0,
         retry_backoff_seconds=0,
-        dry_run=True,
     )
     return AppConfig(
         poll_interval_seconds=1,
@@ -32,7 +31,7 @@ def _config() -> AppConfig:
         debounce_seconds=0,
         max_history=10,
         state_file="state.json",
-        log_file="logs/sentineltray.log",
+        log_file="logs/z7_sentineltray.log",
         log_level="INFO",
         log_console_level="WARNING",
         log_console_enabled=True,
@@ -66,6 +65,7 @@ def _config() -> AppConfig:
 
 class _TestNotifier(Notifier):
     __test__ = False
+
     def set_sender_for_tests(self, sender: EmailSender) -> None:
         for monitor in self._monitors:
             monitor.sender = sender

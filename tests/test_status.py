@@ -1,9 +1,10 @@
-from sentineltray.status import StatusStore, format_status
+from z7_sentineltray.status import StatusStore, format_status
 
 
 def test_status_store_snapshot() -> None:
     store = StatusStore()
     store.set_running(True)
+    store.set_paused(True)
     store.set_last_scan("2026-01-19T23:00:00-03:00")
     store.set_last_match("2026-01-19T23:00:00-03:00")
     store.set_last_send("2026-01-19T23:00:00-03:00")
@@ -15,6 +16,11 @@ def test_status_store_snapshot() -> None:
 
     snapshot = store.snapshot()
     assert snapshot.running is True
+    assert snapshot.update_status == "Não verificado"
+    store.set_update_status("Atualizado")
+    snapshot2 = store.snapshot()
+    assert snapshot2.update_status == "Atualizado"
+    assert snapshot.paused is True
     assert snapshot.last_scan == "2026-01-19T23:00:00-03:00"
     assert snapshot.last_match == "2026-01-19T23:00:00-03:00"
     assert snapshot.last_send == "2026-01-19T23:00:00-03:00"
@@ -29,9 +35,17 @@ def test_status_store_snapshot() -> None:
         phrase_regex="ALERT",
         poll_interval_seconds=60,
     )
-    assert "Running: yes" in text
+    assert "Em execução: sim" in text
     assert "19-01-2026 - 23:00" in text
-    assert "Monitored window: APP" in text
-    assert "Monitored text: ALERT" in text
-    assert "Next check: 19-01-2026 - 23:01" in text
-    assert "Last detection: 19-01-2026 - 23:00" in text
+    assert "Janela monitorada: APP" in text
+    assert "Texto monitorado: ALERT" in text
+    assert "Próxima verificação: 19-01-2026 - 23:01" in text
+    assert "Última detecção: 19-01-2026 - 23:00" in text
+
+
+def test_status_store_active_windows() -> None:
+    store = StatusStore()
+    assert store.snapshot().active_windows == []
+    store.set_active_windows(["Win1", "Win2"])
+    snapshot = store.snapshot()
+    assert snapshot.active_windows == ["Win1", "Win2"]

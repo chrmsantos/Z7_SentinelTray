@@ -1,16 +1,19 @@
 {
+    "python.defaultInterpreterPath": "c:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\.venv\\Scripts\\python.exe",
     "files.readonlyInclude": {
         "{**/.c4z/.extsrcs/*.PROTSYM.cbl,**/.c4z/.extsrcs/*.PROTSYM.listing}": true
     },
     "git.ignoreLimitWarning": true,
     "chat.tools.terminal.autoApprove": {
-        "/^C:/Users/csantos/AppData/Local/Axon/SentinelTray/SystemData/sentineltray/\\.venv/Scripts/python\\.exe -m pytest$/": {
+        "/^C:/Users/csantos/AppData/Local/Axon/Z7_SentinelTray/SystemData/z7_sentineltray/\\.venv/Scripts/python\\.exe -m pytest$/": {
             "approve": true,
             "matchCommandLine": true
         },
-        "/^C:/Users/csantos/AppData/Local/Axon/SentinelTray/SystemData/sentineltray/\\.venv/Scripts/python\\.exe -m pytest -q$/": {
+        "/^C:/Users/csantos/AppData/Local/Axon/Z7_SentinelTray/SystemData/z7_sentineltray/\\.venv/Scripts/python\\.exe -m pytest -q$/": {
             "approve": true,
             "matchCommandLine": true
         }
-    }
+    },
+    "search.useGlobalIgnoreFiles": true,
+    "search.useParentIgnoreFiles": true
 }

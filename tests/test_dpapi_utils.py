@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sentineltray.dpapi_utils import load_secret, save_secret
+from z7_sentineltray.dpapi_utils import load_secret, save_secret
 
 
 def test_dpapi_secret_roundtrip(tmp_path: Path) -> None:

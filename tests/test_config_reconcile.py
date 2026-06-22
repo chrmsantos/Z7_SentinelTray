@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from sentineltray.config_reconcile import (
+from z7_sentineltray.config_reconcile import (
     apply_template_to_config_text,
     ensure_local_config_from_template,
     reconcile_template_config,
@@ -36,9 +36,7 @@ def test_ensure_local_config_from_template_refuses_non_empty(tmp_path: Path) -> 
 def test_reconcile_template_config_applies_merge(tmp_path: Path) -> None:
     config_path = tmp_path / "config.local.yaml"
     template_text = (
-        "log_level: 'INFO'\n"
-        "email: {smtp_host: ''}\n"
-        "telemetry_file: 'logs/telemetry.json'\n"
+        "log_level: 'INFO'\nemail: {smtp_host: ''}\ntelemetry_file: 'logs/telemetry.json'\n"
     )
     legacy_text = "log_level: 'DEBUG'\nemail: {smtp_host: 'smtp.local'}\n"
 

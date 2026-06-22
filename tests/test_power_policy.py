@@ -1,6 +1,6 @@
 import types
 
-from sentineltray import app
+from z7_sentineltray import app
 
 
 def test_apply_execution_state_no_kernel32(monkeypatch) -> None:

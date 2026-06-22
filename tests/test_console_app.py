@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import pytest
 
-from sentineltray import console_app
-from sentineltray.config import AppConfig, EmailConfig, MonitorConfig
-from sentineltray.status import StatusStore
+from z7_sentineltray import console_app
+from z7_sentineltray.config import AppConfig, EmailConfig, MonitorConfig
+from z7_sentineltray.status import StatusStore
 
 
 def _make_config(tmp_path: Path) -> AppConfig:
@@ -21,10 +22,9 @@ def _make_config(tmp_path: Path) -> AppConfig:
         to_addresses=[],
         use_tls=True,
         timeout_seconds=10,
-        subject="SentinelTray",
+        subject="Z7_SentinelTray",
         retry_attempts=1,
         retry_backoff_seconds=1,
-        dry_run=True,
     )
     monitor = MonitorConfig(
         window_title_regex="EXEMPLO",
@@ -39,7 +39,7 @@ def _make_config(tmp_path: Path) -> AppConfig:
         debounce_seconds=10,
         max_history=10,
         state_file=str(tmp_path / "state.json"),
-        log_file=str(tmp_path / "logs" / "sentineltray.log"),
+        log_file=str(tmp_path / "logs" / "z7_sentineltray.log"),
         log_level="INFO",
         log_console_level="WARNING",
         log_console_enabled=True,
@@ -58,7 +58,7 @@ def test_run_console_exit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("SENTINELTRAY_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(console_app, "clear_screen", lambda: None)
     calls: dict[str, Any] = {"finalize": 0, "opened": 0, "joined": False}
     notifier_configs: list[AppConfig] = []
@@ -83,18 +83,32 @@ def test_run_console_exit(
             calls["joined"] = True
 
     monkeypatch.setattr(console_app, "_create_config_editor", fake_create_editor)
+
     def fake_start_notifier(config: AppConfig, *_args: object, **_kwargs: object) -> DummyThread:
         notifier_configs.append(config)
         return DummyThread()
 
     monkeypatch.setattr(console_app, "_start_notifier", fake_start_notifier)
+
+    class DummyTray:
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr(console_app, "TrayIcon", lambda **_kwargs: DummyTray())
+
     def noop_sleep(_seconds: float) -> None:
         return None
 
     monkeypatch.setattr(console_app.time, "sleep", noop_sleep)
 
     inputs: Iterator[str] = iter(["q"])
-    def fake_read_command(_prompt: str, _refresh_event: object) -> str | None:
+
+    def fake_read_command(
+        _prompt: str, _refresh_event: object, _exit_event: object = None
+    ) -> str | None:
         return next(inputs)
 
     monkeypatch.setattr(console_app, "_read_command", fake_read_command)
@@ -110,7 +124,7 @@ def test_run_console_config_error_details(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("SENTINELTRAY_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(console_app, "clear_screen", lambda: None)
     monkeypatch.setattr(
         console_app,
@@ -141,7 +155,7 @@ def test_run_console_config_error_smtp_prompt(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("SENTINELTRAY_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(console_app, "clear_screen", lambda: None)
     monkeypatch.setattr(
         console_app,
@@ -155,7 +169,7 @@ def test_run_console_config_error_smtp_prompt(
         return next(inputs)
 
     monkeypatch.setattr(console_app, "input", fake_input)
-    monkeypatch.setattr(console_app, "getpass", lambda _prompt: "smtp-pass")
+    monkeypatch.setattr(console_app, "prompt_smtp_password_gui", lambda _user, _idx: "smtp-pass")
 
     config = _make_config(tmp_path)
     calls: dict[str, Any] = {"config": None}
@@ -169,9 +183,9 @@ def test_run_console_config_error_smtp_prompt(
     monkeypatch.setattr(console_app, "load_config", fake_load)
     monkeypatch.setattr(console_app, "run_console", fake_run_console)
 
-    console_app.run_console_config_error("Missing SENTINELTRAY_SMTP_PASSWORD")
+    console_app.run_console_config_error("Missing Z7_SENTINELTRAY_SMTP_PASSWORD")
 
-    assert os.environ["SENTINELTRAY_SMTP_PASSWORD"] == "smtp-pass"
+    assert os.environ["Z7_SENTINELTRAY_SMTP_PASSWORD"] == "smtp-pass"
     assert calls["config"] is config
 
 

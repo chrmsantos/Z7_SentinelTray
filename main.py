@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 import sys
@@ -14,7 +14,7 @@ def _ensure_src_on_path() -> None:
 
 _ensure_src_on_path()
 
-from sentineltray.entrypoint import main
+from z7_sentineltray.entrypoint import main
 
 
 if __name__ == "__main__":

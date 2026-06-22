@@ -3,17 +3,25 @@ from pathlib import Path
 
 import pytest
 
-from sentineltray import entrypoint
-from sentineltray.config import get_user_data_dir
+from z7_sentineltray import entrypoint
+from z7_sentineltray.config import get_user_data_dir
 
 
-def test_ensure_local_override_requires_file(tmp_path: Path) -> None:
+def test_ensure_local_override_creates_template_when_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     local_path = tmp_path / "config.local.yaml"
+    monkeypatch.setattr(entrypoint.subprocess, "Popen", lambda *_a, **_k: None)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as exc_info:
         entrypoint._ensure_local_override(local_path)
 
-    assert not local_path.exists()
+    assert local_path.exists(), "template file should have been created"
+    content = local_path.read_text(encoding="utf-8")
+    assert "monitors:" in content
+    assert "smtp_host" in content
+    assert "window_title_regex" in content
+    assert "template created" in str(exc_info.value).lower()
 
 
 def test_ensure_local_override_rejects_empty_file(tmp_path: Path) -> None:
@@ -30,17 +38,19 @@ def test_main_requires_local_override_when_missing(
     monkeypatch.setattr(sys, "argv", ["main.py"])
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setenv(
-        "SENTINELTRAY_ROOT",
+        "Z7_SENTINELTRAY_ROOT",
         str(tmp_path),
     )
     monkeypatch.setattr(entrypoint, "_setup_boot_logging", lambda: None)
     monkeypatch.setattr(entrypoint, "_ensure_single_instance", lambda: None)
     monkeypatch.setattr(entrypoint, "_ensure_windows", lambda: None)
-    monkeypatch.setattr(
-        entrypoint,
-        "run_console_config_error",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(SystemExit()),
-    )
+
+    def fake_first_run_gui(path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# template\n", encoding="utf-8")
+        raise SystemExit("cancelled")
+
+    monkeypatch.setattr(entrypoint, "_first_run_gui_setup", fake_first_run_gui)
 
     local_path = get_user_data_dir() / "config.local.yaml"
     assert not local_path.exists()
@@ -48,7 +58,7 @@ def test_main_requires_local_override_when_missing(
     with pytest.raises(SystemExit):
         entrypoint.main()
 
-    assert not local_path.exists()
+    assert local_path.exists(), "template file should have been created"
 
 
 def test_main_rejects_extra_args(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,7 +75,6 @@ def test_ensure_single_instance_already_running(monkeypatch: pytest.MonkeyPatch)
     notice = {"called": False}
 
     monkeypatch.setattr(entrypoint, "_ensure_single_instance_mutex", lambda: False)
-    monkeypatch.setattr(entrypoint, "_terminate_existing_instance", lambda: False)
     monkeypatch.setattr(
         entrypoint,
         "_show_already_running_notice",

@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Python
 # =============================================================================
 __pycache__/
@@ -27,7 +27,7 @@ htmlcov/
 .tox/
 
 # =============================================================================
-# SentinelTray - runtime data (NEVER commit these)
+# Z7_SentinelTray - runtime data (NEVER commit these)
 # =============================================================================
 
 # User config (contains email addresses, SMTP settings)
@@ -37,16 +37,12 @@ config/config.local.yaml.edit
 # Allow the committed example/template file
 !config/config.local.yaml.example
 
-# Encrypted config and the symmetric key that unlocks it
-config/config.local.key
-config/config.local.yaml.enc
-
 # DPAPI-encrypted SMTP passwords
 config/smtp_password_*.dpapi
 
 # Runtime state and PID file
 config/state.json
-config/sentineltray.pid
+config/z7_sentineltray.pid
 
 # Logs, telemetry, email queue, and error snapshots
 config/logs/
@@ -74,3 +70,15 @@ tmp/
 Thumbs.db
 .DS_Store
 *.lnk
+
+# =============================================================================
+# Build / test output artifacts (root-level scratch files)
+# =============================================================================
+build_*.txt
+smoke_*.txt
+test_*.txt
+unit_*.txt
+*_output.txt
+
+# Edit conflict files (VS Code / GitLens)
+*(\# Edit conflict*).py

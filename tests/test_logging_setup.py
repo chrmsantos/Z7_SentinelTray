@@ -4,29 +4,29 @@ import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from sentineltray.logging_setup import log_context, sanitize_text, setup_logging
+from z7_sentineltray.logging_setup import log_context, sanitize_text, setup_logging
 
 
 def test_setup_logging_creates_run_log_and_prunes(tmp_path: Path) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
-    base_log = log_dir / "sentineltray.log"
+    base_log = log_dir / "z7_sentineltray.log"
 
     existing = []
     for idx in range(6):
-        path = log_dir / f"sentineltray_20260101_00000{idx}_123.log"
+        path = log_dir / f"z7_sentineltray_20260101_00000{idx}_123.log"
         path.write_text("old", encoding="utf-8")
         os.utime(path, (1, 1))
         existing.append(path)
 
     setup_logging(str(base_log), app_version="1.2.3", release_date="2026-01-22")
 
-    logs = sorted(log_dir.glob("sentineltray_*.log"))
+    logs = sorted(log_dir.glob("z7_sentineltray_*.log"))
     assert len(logs) == 3
     assert any(path not in existing for path in logs)
     assert base_log.exists()
-    assert (log_dir / "sentineltray.jsonl").exists()
-    json_runs = sorted(log_dir.glob("sentineltray_*.jsonl"))
+    assert (log_dir / "z7_sentineltray.jsonl").exists()
+    json_runs = sorted(log_dir.glob("z7_sentineltray_*.jsonl"))
     assert json_runs
     assert logging.getLogger("PIL").level == logging.WARNING
     assert logging.getLogger("PIL.Image").level == logging.WARNING
@@ -41,10 +41,10 @@ def test_setup_logging_creates_run_log_and_prunes(tmp_path: Path) -> None:
 def test_setup_logging_caps_retention(tmp_path: Path) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
-    base_log = log_dir / "sentineltray.log"
+    base_log = log_dir / "z7_sentineltray.log"
 
     for idx in range(8):
-        path = log_dir / f"sentineltray_20260101_00001{idx}_123.log"
+        path = log_dir / f"z7_sentineltray_20260101_00001{idx}_123.log"
         path.write_text("old", encoding="utf-8")
         os.utime(path, (1, 1))
 
@@ -54,11 +54,13 @@ def test_setup_logging_caps_retention(tmp_path: Path) -> None:
         log_run_files_keep=10,
     )
 
-    logs = sorted(log_dir.glob("sentineltray_*.log"))
+    logs = sorted(log_dir.glob("z7_sentineltray_*.log"))
     assert len(logs) == 3
 
     handlers = logging.getLogger().handlers
-    rotating_handlers = [handler for handler in handlers if isinstance(handler, RotatingFileHandler)]
+    rotating_handlers = [
+        handler for handler in handlers if isinstance(handler, RotatingFileHandler)
+    ]
     assert rotating_handlers
     assert rotating_handlers[0].backupCount == 3
 
@@ -84,10 +86,10 @@ def test_sanitize_text_redacts_sensitive_values() -> None:
 def test_json_log_contains_context(tmp_path: Path) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
-    base_log = log_dir / "sentineltray.log"
+    base_log = log_dir / "z7_sentineltray.log"
 
     setup_logging(str(base_log), app_version="9.9.9", release_date="2026-01-22")
-    logger = logging.getLogger("sentineltray.test")
+    logger = logging.getLogger("z7_sentineltray.test")
     logger.setLevel(logging.INFO)
     logger.info("test entry", extra={"category": "test"})
 
@@ -97,7 +99,7 @@ def test_json_log_contains_context(tmp_path: Path) -> None:
         except Exception:
             continue
 
-    json_path = log_dir / "sentineltray.jsonl"
+    json_path = log_dir / "z7_sentineltray.jsonl"
     assert json_path.exists()
     line = json_path.read_text(encoding="utf-8").splitlines()[-1]
     payload = json.loads(line)
@@ -114,10 +116,10 @@ def test_json_log_contains_context(tmp_path: Path) -> None:
 def test_json_log_includes_context_and_event(tmp_path: Path) -> None:
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
-    base_log = log_dir / "sentineltray.log"
+    base_log = log_dir / "z7_sentineltray.log"
 
     setup_logging(str(base_log), app_version="9.9.9", release_date="2026-01-22")
-    logger = logging.getLogger("sentineltray.test")
+    logger = logging.getLogger("z7_sentineltray.test")
     logger.setLevel(logging.INFO)
     with log_context(monitor_index=1, note="test@example.com"):
         logger.info("context entry", extra={"category": "test", "event": "scan_error"})
@@ -128,7 +130,7 @@ def test_json_log_includes_context_and_event(tmp_path: Path) -> None:
         except Exception:
             continue
 
-    json_path = log_dir / "sentineltray.jsonl"
+    json_path = log_dir / "z7_sentineltray.jsonl"
     assert json_path.exists()
     line = json_path.read_text(encoding="utf-8").splitlines()[-1]
     payload = json.loads(line)

@@ -1,4 +1,4 @@
-from sentineltray.status import StatusStore
+from z7_sentineltray.status import StatusStore
 
 
 def test_status_tracks_monitor_failures_and_breakers() -> None:

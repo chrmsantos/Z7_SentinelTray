@@ -1,7 +1,8 @@
 import smtplib
+from contextlib import suppress
 
-from sentineltray.config import EmailConfig
-from sentineltray.email_sender import (
+from z7_sentineltray.config import EmailConfig
+from z7_sentineltray.email_sender import (
     EmailAuthError,
     QueueingEmailSender,
     SmtpEmailSender,
@@ -19,10 +20,9 @@ def test_build_sender_returns_queue_sender(tmp_path) -> None:
         to_addresses=["ops@example.com"],
         use_tls=True,
         timeout_seconds=30,
-        subject="SentinelTray Notification",
+        subject="Z7_SentinelTray Notification",
         retry_attempts=0,
         retry_backoff_seconds=0,
-        dry_run=True,
     )
 
     sender = build_sender(config, queue_path=tmp_path / "queue.json")
@@ -39,10 +39,9 @@ def test_email_sender_retries(monkeypatch) -> None:
         to_addresses=["ops@example.com"],
         use_tls=True,
         timeout_seconds=30,
-        subject="SentinelTray Notification",
+        subject="Z7_SentinelTray Notification",
         retry_attempts=2,
         retry_backoff_seconds=0,
-        dry_run=False,
     )
 
     attempts = {"count": 0}
@@ -85,10 +84,9 @@ def test_email_sender_auth_failure_no_retry(monkeypatch) -> None:
         to_addresses=["ops@example.com"],
         use_tls=True,
         timeout_seconds=30,
-        subject="SentinelTray Notification",
+        subject="Z7_SentinelTray Notification",
         retry_attempts=2,
         retry_backoff_seconds=0,
-        dry_run=False,
     )
 
     attempts = {"count": 0}
@@ -116,10 +114,8 @@ def test_email_sender_auth_failure_no_retry(monkeypatch) -> None:
     monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
 
     sender = SmtpEmailSender(config=config)
-    try:
+    with suppress(EmailAuthError):
         sender.send("msg")
-    except EmailAuthError:
-        pass
 
     assert attempts["count"] == 1
 
@@ -137,7 +133,6 @@ def test_email_sender_subject_and_body(monkeypatch) -> None:
         subject="Notification",
         retry_attempts=0,
         retry_backoff_seconds=0,
-        dry_run=False,
     )
 
     captured = {"message": None}
@@ -183,7 +178,6 @@ def test_email_sender_match_subject(monkeypatch) -> None:
         subject="Notification",
         retry_attempts=0,
         retry_backoff_seconds=0,
-        dry_run=False,
     )
 
     captured = {"message": None}
@@ -214,7 +208,7 @@ def test_email_sender_match_subject(monkeypatch) -> None:
 
     msg = captured["message"]
     assert msg is not None
-    assert msg["Subject"] == "SentinelTray Match Alert"
+    assert msg["Subject"] == "Z7_SentinelTray — Correspondência Detectada"
 
 
 def test_email_sender_error_subject(monkeypatch) -> None:
@@ -230,7 +224,6 @@ def test_email_sender_error_subject(monkeypatch) -> None:
         subject="Notification",
         retry_attempts=0,
         retry_backoff_seconds=0,
-        dry_run=False,
     )
 
     captured = {"message": None}
@@ -261,4 +254,4 @@ def test_email_sender_error_subject(monkeypatch) -> None:
 
     msg = captured["message"]
     assert msg is not None
-    assert msg["Subject"] == "SentinelTray Error Alert"
+    assert msg["Subject"] == "Z7_SentinelTray — Erro Detectado"

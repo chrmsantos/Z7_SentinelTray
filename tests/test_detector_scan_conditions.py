@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sentineltray.detector import WindowTextDetector, WindowUnavailableError
+from z7_sentineltray.detector import WindowTextDetector, WindowUnavailableError
 
 
 class FakeElement:

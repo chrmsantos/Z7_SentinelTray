@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from sentineltray.config import load_config_with_override
+from z7_sentineltray.config import load_config_with_override
 
 
 def test_load_config_with_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

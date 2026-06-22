@@ -1,6 +1,6 @@
-from sentineltray.app import Notifier
-from sentineltray.config import AppConfig, EmailConfig, MonitorConfig
-from sentineltray.status import StatusStore
+from z7_sentineltray.app import Notifier
+from z7_sentineltray.config import AppConfig, EmailConfig, MonitorConfig
+from z7_sentineltray.status import StatusStore
 
 
 def test_log_only_mode_skips_send() -> None:
@@ -13,10 +13,9 @@ def test_log_only_mode_skips_send() -> None:
         to_addresses=["ops@example.com"],
         use_tls=True,
         timeout_seconds=10,
-        subject="SentinelTray Notification",
+        subject="Z7_SentinelTray Notification",
         retry_attempts=0,
         retry_backoff_seconds=0,
-        dry_run=True,
     )
     config = AppConfig(
         poll_interval_seconds=1,
@@ -26,7 +25,7 @@ def test_log_only_mode_skips_send() -> None:
         debounce_seconds=600,
         max_history=10,
         state_file="state.json",
-        log_file="logs/sentineltray.log",
+        log_file="logs/z7_sentineltray.log",
         log_level="INFO",
         log_console_level="WARNING",
         log_console_enabled=True,

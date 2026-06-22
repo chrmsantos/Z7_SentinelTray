@@ -1,6 +1,6 @@
 import pytest
 
-from sentineltray.detector import WindowTextDetector, WindowUnavailableError
+from z7_sentineltray.detector import WindowTextDetector, WindowUnavailableError
 
 
 class _FakeWindow:

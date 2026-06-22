@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sentineltray.scan_utils import dedupe_items, filter_debounce, filter_min_repeat
+from z7_sentineltray.scan_utils import dedupe_items, filter_debounce, filter_min_repeat
 
 
 def test_dedupe_items_preserves_order() -> None:
@@ -13,7 +13,7 @@ def test_dedupe_items_preserves_order() -> None:
 
 
 def test_filter_debounce_respects_threshold() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     last_sent = {
         "old": now - timedelta(seconds=120),
         "new": now - timedelta(seconds=5),
@@ -32,7 +32,7 @@ def test_filter_debounce_respects_threshold() -> None:
 
 
 def test_filter_min_repeat_respects_threshold() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     last_sent = {
         "old": now - timedelta(seconds=120),
         "new": now - timedelta(seconds=5),

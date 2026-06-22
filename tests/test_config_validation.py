@@ -2,12 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from sentineltray.config import get_user_log_dir, load_config
+from z7_sentineltray.config import get_user_log_dir, load_config
 
 
-def test_invalid_poll_interval_rejected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_invalid_poll_interval_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
@@ -25,10 +23,9 @@ def test_invalid_poll_interval_rejected(
                 "      to_addresses: []",
                 "      use_tls: true",
                 "      timeout_seconds: 10",
-                "      subject: 'SentinelTray Notification'",
+                "      subject: 'Z7_SentinelTray Notification'",
                 "      retry_attempts: 0",
                 "      retry_backoff_seconds: 0",
-                "      dry_run: true",
                 "poll_interval_seconds: 0",
                 "healthcheck_interval_seconds: 60",
                 "error_backoff_base_seconds: 5",
@@ -36,7 +33,7 @@ def test_invalid_poll_interval_rejected(
                 "debounce_seconds: 0",
                 "max_history: 10",
                 "state_file: 'state.json'",
-                "log_file: 'logs/sentineltray.log'",
+                "log_file: 'logs/z7_sentineltray.log'",
                 "log_level: 'INFO'",
                 "log_console_level: 'WARNING'",
                 "log_console_enabled: true",
@@ -60,7 +57,7 @@ def test_log_paths_are_rehomed_to_user_logs(
 ) -> None:
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     log_root = get_user_log_dir()
-    outside_log = log_root.parent / "other" / "sentineltray.log"
+    outside_log = log_root.parent / "other" / "z7_sentineltray.log"
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         "\n".join(
@@ -69,18 +66,17 @@ def test_log_paths_are_rehomed_to_user_logs(
                 "  - window_title_regex: 'APP'",
                 "    phrase_regex: 'ALERT'",
                 "    email:",
-                "      smtp_host: ''",
+                "      smtp_host: 'smtp.local'",
                 "      smtp_port: 587",
-                "      smtp_username: ''",
+                "      smtp_username: 'smtp-user'",
                 "      smtp_password: ''",
-                "      from_address: ''",
-                "      to_addresses: []",
+                "      from_address: 'alerts@example.com'",
+                "      to_addresses: ['ops@example.com']",
                 "      use_tls: true",
                 "      timeout_seconds: 10",
-                "      subject: 'SentinelTray Notification'",
+                "      subject: 'Z7_SentinelTray Notification'",
                 "      retry_attempts: 0",
                 "      retry_backoff_seconds: 0",
-                "      dry_run: true",
                 "poll_interval_seconds: 1",
                 "healthcheck_interval_seconds: 60",
                 "error_backoff_base_seconds: 5",
@@ -105,12 +101,10 @@ def test_log_paths_are_rehomed_to_user_logs(
 
     config = load_config(str(config_path))
 
-    assert config.log_file == str(log_root / "sentineltray.log")
+    assert config.log_file == str(log_root / "z7_sentineltray.log")
 
 
-def test_invalid_config_version_rejected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_invalid_config_version_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
@@ -128,10 +122,9 @@ def test_invalid_config_version_rejected(
                 "      to_addresses: []",
                 "      use_tls: true",
                 "      timeout_seconds: 10",
-                "      subject: 'SentinelTray Notification'",
+                "      subject: 'Z7_SentinelTray Notification'",
                 "      retry_attempts: 0",
                 "      retry_backoff_seconds: 0",
-                "      dry_run: true",
                 "poll_interval_seconds: 1",
                 "healthcheck_interval_seconds: 60",
                 "error_backoff_base_seconds: 5",
@@ -139,7 +132,7 @@ def test_invalid_config_version_rejected(
                 "debounce_seconds: 0",
                 "max_history: 10",
                 "state_file: 'state.json'",
-                "log_file: 'logs/sentineltray.log'",
+                "log_file: 'logs/z7_sentineltray.log'",
                 "log_level: 'INFO'",
                 "log_console_level: 'WARNING'",
                 "log_console_enabled: true",
@@ -171,16 +164,15 @@ def test_smtp_password_allows_config_value(monkeypatch: pytest.MonkeyPatch, tmp_
                 "    email:",
                 "      smtp_host: 'smtp.local'",
                 "      smtp_port: 587",
-                "      smtp_username: ''",
+                "      smtp_username: 'smtp-user'",
                 "      smtp_password: 'secret'",
                 "      from_address: 'alerts@example.com'",
                 "      to_addresses: ['ops@example.com']",
                 "      use_tls: true",
                 "      timeout_seconds: 10",
-                "      subject: 'SentinelTray Notification'",
+                "      subject: 'Z7_SentinelTray Notification'",
                 "      retry_attempts: 0",
                 "      retry_backoff_seconds: 0",
-                "      dry_run: true",
                 "poll_interval_seconds: 60",
                 "healthcheck_interval_seconds: 60",
                 "error_backoff_base_seconds: 5",
@@ -188,7 +180,7 @@ def test_smtp_password_allows_config_value(monkeypatch: pytest.MonkeyPatch, tmp_
                 "debounce_seconds: 0",
                 "max_history: 10",
                 "state_file: 'state.json'",
-                "log_file: 'logs/sentineltray.log'",
+                "log_file: 'logs/z7_sentineltray.log'",
                 "log_level: 'INFO'",
                 "log_console_level: 'WARNING'",
                 "log_console_enabled: true",
@@ -209,7 +201,7 @@ def test_smtp_password_allows_config_value(monkeypatch: pytest.MonkeyPatch, tmp_
 
 def test_smtp_password_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
-    monkeypatch.setenv("SENTINELTRAY_SMTP_PASSWORD", "secret")
+    monkeypatch.setenv("Z7_SENTINELTRAY_SMTP_PASSWORD", "secret")
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         "\n".join(
@@ -220,16 +212,15 @@ def test_smtp_password_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: P
                 "    email:",
                 "      smtp_host: 'smtp.local'",
                 "      smtp_port: 587",
-                "      smtp_username: ''",
+                "      smtp_username: 'smtp-user'",
                 "      smtp_password: ''",
                 "      from_address: 'alerts@example.com'",
                 "      to_addresses: ['ops@example.com']",
                 "      use_tls: true",
                 "      timeout_seconds: 10",
-                "      subject: 'SentinelTray Notification'",
+                "      subject: 'Z7_SentinelTray Notification'",
                 "      retry_attempts: 0",
                 "      retry_backoff_seconds: 0",
-                "      dry_run: true",
                 "poll_interval_seconds: 60",
                 "healthcheck_interval_seconds: 60",
                 "error_backoff_base_seconds: 5",
@@ -237,7 +228,7 @@ def test_smtp_password_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: P
                 "debounce_seconds: 0",
                 "max_history: 10",
                 "state_file: 'state.json'",
-                "log_file: 'logs/sentineltray.log'",
+                "log_file: 'logs/z7_sentineltray.log'",
                 "log_level: 'INFO'",
                 "log_console_level: 'WARNING'",
                 "log_console_enabled: true",

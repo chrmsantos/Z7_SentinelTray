@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sentineltray.app import Notifier
-from sentineltray.config import AppConfig, EmailConfig, MonitorConfig
-from sentineltray.detector import WindowTextDetector
-from sentineltray.status import StatusStore
+from z7_sentineltray.app import Notifier
+from z7_sentineltray.config import AppConfig, EmailConfig, MonitorConfig
+from z7_sentineltray.detector import WindowTextDetector
+from z7_sentineltray.status import StatusStore
 
 
 def test_debounce_skips_recent_messages(monkeypatch) -> None:
@@ -16,10 +16,9 @@ def test_debounce_skips_recent_messages(monkeypatch) -> None:
         to_addresses=["ops@example.com"],
         use_tls=True,
         timeout_seconds=10,
-        subject="SentinelTray Notification",
+        subject="Z7_SentinelTray Notification",
         retry_attempts=0,
         retry_backoff_seconds=0,
-        dry_run=True,
     )
     config = AppConfig(
         poll_interval_seconds=1,
@@ -29,7 +28,7 @@ def test_debounce_skips_recent_messages(monkeypatch) -> None:
         debounce_seconds=600,
         max_history=10,
         state_file="state.json",
-        log_file="logs/sentineltray.log",
+        log_file="logs/z7_sentineltray.log",
         log_level="INFO",
         log_console_level="WARNING",
         log_console_enabled=True,
@@ -51,7 +50,7 @@ def test_debounce_skips_recent_messages(monkeypatch) -> None:
     status = StatusStore()
     notifier = Notifier(config=config, status=status)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for monitor in notifier._monitors:
         monitor.last_sent = {
             "recent": now,

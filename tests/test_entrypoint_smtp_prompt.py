@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import Iterator
-
 import pytest
 
-from sentineltray import entrypoint
-from sentineltray.config import AppConfig, EmailConfig, MonitorConfig
+from z7_sentineltray import entrypoint
+from z7_sentineltray.config import AppConfig, EmailConfig, MonitorConfig
 
 
 def _make_config(username: str) -> AppConfig:
@@ -18,10 +16,9 @@ def _make_config(username: str) -> AppConfig:
         to_addresses=["ops@example.com"],
         use_tls=True,
         timeout_seconds=10,
-        subject="SentinelTray",
+        subject="Z7_SentinelTray",
         retry_attempts=1,
         retry_backoff_seconds=1,
-        dry_run=True,
     )
     monitor = MonitorConfig(
         window_title_regex="APP",
@@ -36,7 +33,7 @@ def _make_config(username: str) -> AppConfig:
         debounce_seconds=60,
         max_history=50,
         state_file="state.json",
-        log_file="logs/sentineltray.log",
+        log_file="logs/z7_sentineltray.log",
         log_level="INFO",
         log_console_level="WARNING",
         log_console_enabled=True,
@@ -64,8 +61,8 @@ def _make_config(username: str) -> AppConfig:
 
 
 def test_missing_smtp_passwords_requires_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SENTINELTRAY_SMTP_PASSWORD", raising=False)
-    monkeypatch.delenv("SENTINELTRAY_SMTP_PASSWORD_1", raising=False)
+    monkeypatch.delenv("Z7_SENTINELTRAY_SMTP_PASSWORD", raising=False)
+    monkeypatch.delenv("Z7_SENTINELTRAY_SMTP_PASSWORD_1", raising=False)
     config = _make_config("smtp-user")
 
     missing = entrypoint._missing_smtp_passwords(config)
@@ -74,24 +71,20 @@ def test_missing_smtp_passwords_requires_prompt(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_prompt_smtp_password_sets_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SENTINELTRAY_SMTP_PASSWORD", raising=False)
-    monkeypatch.delenv("SENTINELTRAY_SMTP_PASSWORD_1", raising=False)
+    monkeypatch.delenv("Z7_SENTINELTRAY_SMTP_PASSWORD", raising=False)
+    monkeypatch.delenv("Z7_SENTINELTRAY_SMTP_PASSWORD_1", raising=False)
 
-    inputs: Iterator[str] = iter([""])
-
-    def fake_input(_prompt: str) -> str:
-        return next(inputs)
-
-    monkeypatch.setattr(entrypoint, "input", fake_input)
-    monkeypatch.setattr(entrypoint, "getpass", lambda _prompt: "secret")
+    monkeypatch.setattr(
+        "z7_sentineltray.gui_app.prompt_smtp_password_gui", lambda _user, _idx: "secret"
+    )
 
     entrypoint._prompt_smtp_passwords([(1, "smtp-user")])
 
-    assert entrypoint.os.environ["SENTINELTRAY_SMTP_PASSWORD_1"] == "secret"
+    assert entrypoint.os.environ["Z7_SENTINELTRAY_SMTP_PASSWORD_1"] == "secret"
 
 
 def test_missing_passwords_skips_when_global_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SENTINELTRAY_SMTP_PASSWORD", "global")
+    monkeypatch.setenv("Z7_SENTINELTRAY_SMTP_PASSWORD", "global")
     config = _make_config("smtp-user")
 
     missing = entrypoint._missing_smtp_passwords(config)
@@ -100,7 +93,7 @@ def test_missing_passwords_skips_when_global_set(monkeypatch: pytest.MonkeyPatch
 
 
 def test_missing_passwords_skips_empty_username(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SENTINELTRAY_SMTP_PASSWORD", raising=False)
+    monkeypatch.delenv("Z7_SENTINELTRAY_SMTP_PASSWORD", raising=False)
     config = _make_config("")
 
     missing = entrypoint._missing_smtp_passwords(config)
@@ -109,7 +102,7 @@ def test_missing_passwords_skips_empty_username(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_missing_passwords_skips_when_config_has_password(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SENTINELTRAY_SMTP_PASSWORD", raising=False)
+    monkeypatch.delenv("Z7_SENTINELTRAY_SMTP_PASSWORD", raising=False)
     config = _make_config("smtp-user")
     config = config.__class__(
         **{

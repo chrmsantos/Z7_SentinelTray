@@ -1,4 +1,4 @@
-monitors:
+﻿monitors:
   - window_title_regex: 'SECRET_APP'
     phrase_regex: "ALERT"
     email:
@@ -10,7 +10,6 @@ monitors:
       to_addresses: ["local@example.com"]
       use_tls: true
       timeout_seconds: 10
-      subject: "SentinelTray Alert"
+      subject: "Z7_SentinelTray Alert"
       retry_attempts: 2
       retry_backoff_seconds: 3
-      dry_run: true

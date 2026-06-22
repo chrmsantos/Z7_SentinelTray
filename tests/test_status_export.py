@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from sentineltray.telemetry import JsonWriter
+from z7_sentineltray.telemetry import JsonWriter
 
 
 def test_status_export_writer(tmp_path: Path) -> None:

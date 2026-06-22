@@ -1,6 +1,6 @@
-# SentinelTray
+# Z7_SentinelTray
 
-Release candidate: 3.0.0-rc.3 (06-02-2026)
+Version: 4.1.0 (17-04-2026)
 
 Minimal Windows notifier that reads visible text from a target desktop app and sends an email when a phrase appears.
 
@@ -23,9 +23,8 @@ Edit config.local.yaml and set:
 - monitors[].email.subject
 - monitors[].email.retry_attempts
 - monitors[].email.retry_backoff_seconds
-- monitors[].email.dry_run = true on first run; set false after validation
 - monitors[].email.smtp_username (no config local)
-- monitors[].email.smtp_password: leave empty; SentinelTray prompts on startup and stores it encrypted (DPAPI)
+- monitors[].email.smtp_password: leave empty; Z7_SentinelTray prompts on startup and stores it encrypted (DPAPI)
 - allow_window_restore, send_repeated_matches
 - log_only_mode
 - log_level, log_console_level, log_console_enabled
@@ -45,7 +44,7 @@ If config.local.yaml is missing or invalid, the app opens the console error view
 
 SMTP passwords are stored using Windows DPAPI in:
 
-- config\smtp_password_<index>.dpapi
+- config\smtp_password_\<index\>.dpapi
 
 ## Run
 
@@ -58,26 +57,26 @@ Manual venv activation from CMD:
 scripts\activate_venv.cmd
 
 If you run main.py directly, it automatically adds src/ to the import path.
-SentinelTray starts in the foreground console interface. Use the menu to open Config,
+Z7_SentinelTray starts in the foreground console interface. Use the menu to open Config,
 trigger a manual scan, check matching windows, or Exit.
 
 To keep the console menu stable, interactive mode suppresses console logging and
 routes logs to the configured files only.
 
-While running, SentinelTray prevents automatic sleep or display power-down to keep
+While running, Z7_SentinelTray prevents automatic sleep or display power-down to keep
 the monitored window available for scans.
 
-For a simple start, use the shortcut at the project root: Executar SentinelTray.cmd.
+For a simple start, use the shortcut at the project root: Executar Z7_SentinelTray.cmd.
 
 ## Named executable (no admin)
 
-To make the process clearly identifiable in Task Manager as SentinelTray.exe, build a named
+To make the process clearly identifiable in Task Manager as Z7_SentinelTray.exe, build a named
 executable locally (no admin privileges required):
 
 scripts\build_named_exe.cmd
 
-This creates dist\SentinelTray.exe. Launch it normally; in Task Manager it will appear as
-SentinelTray.exe instead of python.exe/pythonw.exe.
+This creates dist\Z7_SentinelTray.exe. Launch it normally; in Task Manager it will appear as
+Z7_SentinelTray.exe instead of python.exe/pythonw.exe.
 
 ## Config editing
 
@@ -127,10 +126,9 @@ monitors:
          to_addresses: ['ops1@example.com']
          use_tls: true
          timeout_seconds: 10
-         subject: 'SentinelTray Notification'
+         subject: 'Z7_SentinelTray Notification'
          retry_attempts: 0
          retry_backoff_seconds: 0
-         dry_run: true
    - window_title_regex: 'APP2'
       phrase_regex: 'ALERT2'
       email:
@@ -143,19 +141,18 @@ monitors:
          to_addresses: ['ops2@example.com']
          use_tls: true
          timeout_seconds: 10
-         subject: 'SentinelTray Notification'
+         subject: 'Z7_SentinelTray Notification'
          retry_attempts: 0
          retry_backoff_seconds: 0
-         dry_run: true
 ```
 
 ## Notes
 
 - Logs are written per execution with detailed fields and kept with a max of 3 files in config\logs (values above 3 are capped).
 - Logs rotate by size using log_max_bytes and log_backup_count.
-- JSON logs are written alongside text logs in sentineltray.jsonl and per-run sentineltray_*.jsonl.
-- If the config is missing or invalid, SentinelTray still starts in "Config Error" mode and exposes the error details in the console.
-- When another instance is already running, the previous instance is terminated before startup (logged in sentineltray_boot.log).
+- JSON logs are written alongside text logs in z7_sentineltray.jsonl and per-run z7_sentineltray_*.jsonl.
+- If the config is missing or invalid, Z7_SentinelTray still starts in "Config Error" mode and exposes the error details in the console.
+- When another instance is already running, the previous instance is terminated before startup (logged in z7_sentineltray_boot.log).
 - Third-party debug logs are suppressed to keep logs actionable.
 - Logs and telemetry redact sensitive strings (emails and local paths) and store match summaries as hashes.
 - state.json stores the last sent messages to avoid duplicates.
@@ -178,8 +175,8 @@ monitors:
 - Local telemetry file captures last activity for quick diagnostics and lives in config\logs.
 - Log-only mode skips normal alert sends but still emails error notifications.
 - Email delivery failures are detected and reported as specific errors.
-- Match alert emails use subject "SentinelTray Match Alert"; error alerts use "SentinelTray Error Alert".
-- Info-category emails are suppressed; subjects like "SentinelTray Info" are never sent.
+- Match alert emails use subject "Z7_SentinelTray Match Alert"; error alerts use "Z7_SentinelTray Error Alert".
+- Info-category emails are suppressed; subjects like "Z7_SentinelTray Info" are never sent.
 - Config validation rejects invalid intervals and paths at startup.
 - Watchdog detects long scans and can reset components.
 - Scans run only after 2+ minutes of user inactivity.
@@ -188,3 +185,7 @@ monitors:
 - Security policy in SECURITY.md.
 - Licenses and third parties in docs/licenses.md.
 - Releases include provenance (SLSA).
+
+## Author
+
+CMS

@@ -1,58 +1,242 @@
-# SentinelTray — example configuration (safe to commit).
-# Copy this file to config.local.yaml and fill in your values.
-# Do NOT store smtp_password here — leave it empty and enter it at the first
-# launch prompt; it will be saved encrypted to smtp_password_<n>.dpapi.
+# Z7_SentinelTray — Configuração.
+# Copie este arquivo para config.local.yaml e preencha com seus valores.
+# NÃO armazene smtp_password aqui — deixe em branco e informe na primeira
+# inicialização; a senha será salva criptografada em smtp_password_<n>.dpapi.
 
+# ─────────────────────────────────────────────────────────────────────────────
+# MONITORS — lista de janelas a serem monitoradas
+# Cada item representa uma janela de aplicação e as regras de alerta por e-mail.
+# ─────────────────────────────────────────────────────────────────────────────
 monitors:
-- window_title_regex: 'YourApp\.ExeName'     # regex matched against window title
-  phrase_regex: 'ALERT PHRASE'               # regex matched against window text
-  email:
-    smtp_host: 'smtp.gmail.com'
-    smtp_port: 587
-    smtp_username: 'sender@example.com'
-    smtp_password: ''                        # leave empty — use DPAPI prompt
-    from_address: 'sender@example.com'
-    to_addresses: ['recipient@example.com']
-    use_tls: true
-    timeout_seconds: 10
-    subject: SentinelTray
-    retry_attempts: 2
-    retry_backoff_seconds: 3
-    dry_run: false
+- # Expressão regular (regex) comparada contra o título da janela do processo.
+  # Use '\\.' para escapar pontos literais no nome do executável.
+  # Exemplo: 'MinhaApp\\.exe' corresponde a "MinhaApp.exe".
+  window_title_regex: 'Sino\.Siscam'
 
+  # Expressão regular (regex) comparada contra o texto visível dentro da janela.
+  # Quando o texto da janela casar com este padrão, um alerta será disparado.
+  # Exemplo: 'ERRO CRÍTICO|FALHA' dispara ao detectar qualquer dessas frases.
+  phrase_regex: 'NÃO RECEBID'
+
+  # Configurações de envio de e-mail para este monitor específico.
+  email:
+    # Endereço do servidor SMTP utilizado para enviar os e-mails de alerta.
+    # Exemplos: 'smtp.gmail.com', 'smtp.office365.com', 'mail.empresa.com.br'
+    smtp_host: 'smtp.gmail.com'
+
+    # Porta do servidor SMTP.
+    # Valores comuns: 587 (STARTTLS/TLS), 465 (SSL), 25 (sem criptografia).
+    smtp_port: 587
+
+    # Nome de usuário (geralmente o endereço de e-mail) para autenticação no SMTP.
+    smtp_username: 'z7_sentineltray@gmail.com'
+
+    # Senha SMTP. Deixe SEMPRE vazio aqui.
+    # O Z7_SentinelTray solicitará a senha interativamente na primeira execução
+    # e a armazenará de forma segura via DPAPI (Windows Data Protection API)
+    # no arquivo smtp_password_<n>.dpapi, na pasta config/.
+    smtp_password: ''
+
+    # Endereço de e-mail que aparecerá como remetente nas mensagens enviadas.
+    # Normalmente igual ao smtp_username, mas pode ser um alias configurado
+    # no provedor de e-mail.
+    from_address: 'z7_sentineltray@gmail.com'
+
+    # Lista de endereços de e-mail que receberão os alertas.
+    # Pode conter múltiplos destinatários: ['dest1@exemplo.com', 'dest2@exemplo.com']
+    to_addresses: ['chrmsantos@gmail.com']
+
+    # Habilita criptografia TLS/STARTTLS na conexão SMTP.
+    # Recomendado: true. Desative apenas em servidores internos sem suporte a TLS.
+    use_tls: true
+
+    # Tempo máximo (em segundos) aguardado para estabelecer conexão e enviar o e-mail.
+    # Aumentar esse valor pode ajudar em redes lentas ou servidores com alta latência.
+    timeout_seconds: 10
+
+    # Assunto padrão dos e-mails de alerta enviados por este monitor.
+    subject: Z7_SentinelTray
+
+    # Número de tentativas de reenvio em caso de falha no envio do e-mail.
+    # Após todas as tentativas falharem, a mensagem vai para a fila persistente.
+    retry_attempts: 2
+
+    # Tempo de espera base (em segundos) entre tentativas consecutivas de reenvio.
+    # Segue estratégia de backoff exponencial: a espera dobra a cada tentativa
+    # (backoff_seconds * 2^tentativa).
+    retry_backoff_seconds: 3
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POLLING & TIMING — controle de frequência de verificação
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Intervalo (em segundos) entre cada varredura nas janelas monitoradas.
+# Valores menores tornam a detecção mais rápida, mas aumentam o uso de CPU.
+# Recomendado: entre 30 e 120 segundos para uso geral.
 poll_interval_seconds: 60
-healthcheck_interval_seconds: 900
+
+# Intervalo (em segundos) entre verificações de "saúde" (healthcheck) do sistema.
+# O healthcheck registra um log periódico confirmando que o Z7_SentinelTray está ativo.
+# Valor padrão: 1800 (30 minutos).
+healthcheck_interval_seconds: 1800
+
+# Controla se o e-mail de healthcheck é enviado apenas em caso de erro ativo.
+# Quando true (padrão), o e-mail de status só é enviado se houver um erro pendente,
+# evitando notificações periódicas desnecessárias durante operação normal.
+# Defina como false para receber confirmações periódicas mesmo sem erros.
+healthcheck_send_on_error_only: true
+
+# Tempo base (em segundos) para o backoff exponencial em caso de erros gerais.
+# Na primeira falha, o sistema aguarda esse valor antes de tentar novamente.
+# A cada falha consecutiva, o tempo dobra até atingir error_backoff_max_seconds.
 error_backoff_base_seconds: 5
+
+# Tempo máximo (em segundos) que o backoff exponencial pode atingir.
+# Limita o crescimento do intervalo de espera após falhas repetidas.
 error_backoff_max_seconds: 300
-debounce_seconds: 600
+
+# Janela de supressão de alertas duplicados (em segundos) por monitor.
+# Após um alerta ser enviado, novos alertas do mesmo monitor são ignorados
+# durante esse período, evitando spam de e-mails para o mesmo evento.
+# Exemplo: 600 = 10 minutos de silêncio após cada alerta.
+debounce_seconds: 1800
+
+# Número máximo de entradas mantidas no histórico de correspondências por monitor.
+# O histórico é usado para detectar alertas repetidos e calcular deltas.
+# Entradas mais antigas são descartadas quando o limite é atingido.
 max_history: 50
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ARQUIVOS & LOGS — caminhos e configurações de registro
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Caminho do arquivo de estado persistente do Z7_SentinelTray.
+# Armazena o histórico de alertas e o estado dos monitores entre reinicializações.
+# Caminho relativo à pasta de dados do aplicativo (config/).
 state_file: state.json
-log_file: logs/sentineltray.log
+
+# Caminho do arquivo de log principal (formato texto rotacionado).
+# Registra eventos, erros e informações de operação do Z7_SentinelTray.
+log_file: logs/z7_sentineltray.log
+
+# Nível mínimo de severidade para gravar no arquivo de log.
+# Opções (do mais detalhado ao menos): DEBUG, INFO, WARNING, ERROR, CRITICAL.
+# Recomendado: INFO para produção, DEBUG para diagnóstico de problemas.
 log_level: INFO
+
+# Nível mínimo de severidade para exibir mensagens no console (stdout/stderr).
+# Independente de log_level; útil para ver avisos críticos sem poluir o log.
 log_console_level: WARNING
+
+# Habilita ou desabilita a saída de log no console.
+# Desative (false) para suprimir toda saída no console em execução silenciosa.
 log_console_enabled: true
+
+# Tamanho máximo (em bytes) de cada arquivo de log antes de ser rotacionado.
+# 5000000 = ~4,8 MB. Ao atingir o limite, o arquivo atual é renomeado
+# e um novo arquivo de log é criado.
 log_max_bytes: 5000000
+
+# Número de arquivos de log rotacionados a manter além do arquivo atual.
+# Exemplo: 3 mantém z7_sentineltray.log, z7_sentineltray.log.1, .log.2 e .log.3.
+# Arquivos mais antigos são automaticamente removidos.
 log_backup_count: 3
+
+# Quantidade de arquivos de log de execução (run logs) a preservar.
+# Logs de execução são criados a cada inicialização do Z7_SentinelTray.
+# Execuções mais antigas além desse limite são excluídas automaticamente.
 log_run_files_keep: 3
+
+# Caminho do arquivo de telemetria (formato JSON Lines).
+# Registra eventos estruturados para análise de uso e diagnóstico.
+# Não contém dados sensíveis; pode ser compartilhado para suporte.
 telemetry_file: logs/telemetry.json
 
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPORTAMENTO — controle de como o Z7_SentinelTray reage aos eventos
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Permite que o Z7_SentinelTray restaure janelas minimizadas para ler seu conteúdo.
+# Algumas janelas só expõem seu texto quando estão visíveis/restauradas.
+# Desative (false) se não quiser que o aplicativo altere o estado das janelas.
 allow_window_restore: true
+
+# Modo somente log: quando true, alertas são registrados no log mas NÃO são
+# enviados por e-mail. Útil para testar configurações sem disparar e-mails reais.
 log_only_mode: false
+
+# Permite reenviar alertas para correspondências que já foram detectadas antes.
+# Quando true, o mesmo alerta pode ser enviado novamente após debounce_seconds.
+# Quando false, cada correspondência única é alertada apenas uma vez.
 send_repeated_matches: true
+
+# Intervalo mínimo (em segundos) entre alertas repetidos do mesmo monitor.
+# 0 = sem restrição adicional além de debounce_seconds.
+# Use este valor para impor um silêncio mínimo entre alertas repetidos.
 min_repeat_seconds: 0
+
+# Tempo de espera (em segundos) antes de reenviar uma notificação de erro.
+# Evita spam de e-mails de erro em caso de falhas contínuas (ex.: SMTP fora do ar).
+# Exemplo: 300 = no máximo um e-mail de erro a cada 5 minutos.
 error_notification_cooldown_seconds: 300
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CIRCUIT BREAKER DE JANELA — proteção contra erros repetidos ao ler janelas
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Tempo base (em segundos) de backoff ao falhar ao acessar uma janela monitorada.
+# Segue o mesmo padrão exponencial de error_backoff_base_seconds.
 window_error_backoff_base_seconds: 5
+
+# Tempo máximo (em segundos) de backoff para erros de acesso a janelas.
+# Após esse limite, o backoff para de crescer para aquela janela.
 window_error_backoff_max_seconds: 120
+
+# Número de falhas consecutivas de acesso a uma janela que ativa o circuit breaker.
+# Quando atingido, a janela é temporariamente ignorada para evitar loops de erro.
 window_error_circuit_threshold: 3
+
+# Tempo (em segundos) que o circuit breaker mantém a janela desativada após
+# ser acionado. Após esse período, o Z7_SentinelTray tenta acessar a janela novamente.
 window_error_circuit_seconds: 300
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FILA DE E-MAILS — persistência de e-mails com falha no envio
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Caminho do arquivo de fila persistente de e-mails.
+# E-mails que falham em todas as tentativas imediatas são enfileirados aqui
+# e reenviados automaticamente nas próximas execuções.
 email_queue_file: logs/email_queue.json
+
+# Número máximo de e-mails que podem estar na fila simultaneamente.
+# Ao atingir o limite, novos e-mails com falha são descartados (com aviso no log).
 email_queue_max_items: 500
+
+# Idade máxima (em segundos) de um e-mail na fila antes de ser descartado.
+# 86400 = 24 horas. E-mails mais antigos que isso são removidos da fila
+# mesmo se ainda não tiverem sido enviados com sucesso.
 email_queue_max_age_seconds: 86400
+
+# Número máximo de tentativas de envio para cada e-mail na fila.
+# Após esse número de tentativas fracassadas, o e-mail é descartado da fila.
 email_queue_max_attempts: 10
+
+# Tempo base (em segundos) de backoff entre tentativas de reenvio da fila.
+# A espera cresce exponencialmente: 30s, 60s, 120s... até email_backoff_max.
 email_queue_retry_base_seconds: 30
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PAUSA POR ATIVIDADE — evita alertas enquanto o usuário está no computador
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Quando true, suspende o envio de alertas enquanto o usuário está ativo no PC.
+# Útil para evitar interrupções quando o operador está monitorando manualmente.
+# A detecção de atividade usa o tempo de ociosidade do sistema operacional.
 pause_on_user_active: true
+
+# Tempo de ociosidade (em segundos) necessário para considerar o usuário inativo.
+# O Z7_SentinelTray só retoma o envio de alertas após o usuário ficar inativo
+# por pelo menos esse período.
+# Exemplo: 120 = 2 minutos sem atividade de teclado/mouse para retomar alertas.
 pause_idle_threshold_seconds: 120

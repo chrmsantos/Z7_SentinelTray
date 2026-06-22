@@ -2,7 +2,7 @@ import pytest
 
 pywinauto = pytest.importorskip("pywinauto")
 
-from sentineltray.detector import WindowTextDetector
+from z7_sentineltray.detector import WindowTextDetector  # noqa: E402
 
 
 def test_prepare_window_restores_minimized(monkeypatch) -> None:
@@ -121,7 +121,7 @@ def test_get_window_resolves_ambiguous(monkeypatch) -> None:
             ]
 
     detector = WindowTextDetector("APP", allow_window_restore=True)
-    monkeypatch.setattr("sentineltray.detector.Desktop", FakeDesktop)
+    monkeypatch.setattr("z7_sentineltray.detector.Desktop", FakeDesktop)
 
     window = detector._get_window()
 
@@ -154,7 +154,7 @@ def test_get_window_matches_partial_title(monkeypatch) -> None:
             return [FakeWindow("Main Application - Monitor")]
 
     detector = WindowTextDetector("Monitor", allow_window_restore=True)
-    monkeypatch.setattr("sentineltray.detector.Desktop", FakeDesktop)
+    monkeypatch.setattr("z7_sentineltray.detector.Desktop", FakeDesktop)
 
     window = detector._get_window()
 
@@ -181,7 +181,7 @@ def test_list_matching_window_titles(monkeypatch) -> None:
             ]
 
     detector = WindowTextDetector("Monitor", allow_window_restore=True)
-    monkeypatch.setattr("sentineltray.detector.Desktop", FakeDesktop)
+    monkeypatch.setattr("z7_sentineltray.detector.Desktop", FakeDesktop)
 
     titles = detector.list_matching_window_titles()
 
@@ -217,6 +217,7 @@ def test_window_is_minimized_handles_missing_attrs() -> None:
 # ---------------------------------------------------------------------------
 # Non-intrusive scan tests: window state is restored after reading
 # ---------------------------------------------------------------------------
+
 
 class _MinimizableWindow:
     """Fake window that starts minimized and tracks state changes."""

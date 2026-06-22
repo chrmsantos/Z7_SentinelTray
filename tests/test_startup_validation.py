@@ -1,4 +1,4 @@
-from sentineltray.detector import WindowTextDetector, WindowUnavailableError
+from z7_sentineltray.detector import WindowTextDetector, WindowUnavailableError
 
 
 def test_check_ready_raises_when_missing(monkeypatch) -> None:

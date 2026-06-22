@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sentineltray.telemetry import atomic_write_text
+from z7_sentineltray.telemetry import atomic_write_text
 
 
 def test_atomic_write_text_replaces_and_cleans_temp(tmp_path: Path) -> None:

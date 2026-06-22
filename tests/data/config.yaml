@@ -1,4 +1,4 @@
-monitors:
+﻿monitors:
   - window_title_regex: 'App\.Monitor\.Desktop'
     phrase_regex: "ALERT"
     email:
@@ -10,10 +10,9 @@ monitors:
       to_addresses: ["ops@example.com"]
       use_tls: true
       timeout_seconds: 10
-      subject: "SentinelTray Alert"
+      subject: "Z7_SentinelTray Alert"
       retry_attempts: 2
       retry_backoff_seconds: 3
-      dry_run: true
 poll_interval_seconds: 180
 healthcheck_interval_seconds: 900
 error_backoff_base_seconds: 5
@@ -21,7 +20,7 @@ error_backoff_max_seconds: 300
 debounce_seconds: 600
 max_history: 50
 state_file: "state.json"
-log_file: "logs/sentineltray.log"
+log_file: "logs/z7_sentineltray.log"
 log_level: "INFO"
 log_console_level: "WARNING"
 log_console_enabled: true
