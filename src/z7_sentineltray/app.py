@@ -28,7 +28,7 @@ from .email_sender import (
     QueueingEmailSender,
     build_sender,
 )
-from .idle_utils import get_idle_seconds, is_screen_locked
+from .idle_utils import end_scan, get_idle_seconds, is_screen_locked, start_scan
 from .io_utils import read_json_safe
 from .logging_setup import log_context, sanitize_text, scan_context, setup_logging
 from .scan_utils import dedupe_items, filter_debounce, filter_min_repeat
@@ -488,8 +488,12 @@ class Notifier:
     def scan_once(self) -> None:
         """Run a single monitoring scan cycle with a fresh scan context."""
         scan_id = uuid4().hex
-        with scan_context(scan_id):
-            self._scan_once_impl()
+        start_scan()
+        try:
+            with scan_context(scan_id):
+                self._scan_once_impl()
+        finally:
+            end_scan()
 
     def _scan_once_impl(self) -> None:  # noqa: C901
         self.status.set_last_scan(_now_iso())
