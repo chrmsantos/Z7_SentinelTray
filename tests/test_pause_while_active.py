@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
+import time
 
 import pytest
 
@@ -247,3 +248,87 @@ def test_user_active_warning_email_sent(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert len(sender.sent_messages) == 1
     assert "aviso:" in sender.sent_messages[0]
     assert "segurança contra acesso não autorizado" in sender.sent_messages[0]
+
+
+def test_user_active_warning_email_not_sent_on_resume(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Warning email should not be sent immediately when resuming from manual pause while user is active."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    sender = _RecordingSender()
+    notifier._sender = sender  # type: ignore[assignment]
+
+    # User is active: idle = 10s
+    monkeypatch.setattr(app, "get_idle_seconds", lambda: 10.0)
+
+    stop_event = Event()
+    pause_event = Event()
+    pause_event.set()  # Start paused
+
+    # Run in a background thread and then resume
+    thread = Thread(
+        target=notifier.run_loop,
+        args=(stop_event, None, None, None, pause_event),
+    )
+    thread.start()
+
+    try:
+        time.sleep(0.3)
+        # Verify it is paused
+        assert notifier.status.snapshot().paused is True
+
+        # Clear manual pause (resume)
+        pause_event.clear()
+
+        # Wait a moment for loop iteration to process unpaused state
+        time.sleep(0.3)
+
+        # Stop loop
+        stop_event.set()
+        thread.join(timeout=2)
+
+        # No warning email should be sent, because unpausing starts/resumes automatic monitoring
+        # and at this transition the warning is suppressed even if user is active.
+        assert len(sender.sent_messages) == 0
+    finally:
+        stop_event.set()
+        pause_event.clear()
+        if thread.is_alive():
+            thread.join(timeout=1)
+
+
+def test_user_active_warning_email_not_sent_after_manual_scan(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Warning email should not be sent after a manual scan when user is active."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    sender = _RecordingSender()
+    notifier._sender = sender  # type: ignore[assignment]
+
+    # User is active: idle = 10s
+    monkeypatch.setattr(app, "get_idle_seconds", lambda: 10.0)
+
+    stop_event = Event()
+    manual_scan_event = Event()
+    manual_scan_event.set()  # Trigger manual scan
+
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        # Stop after 2 telemetry calls (1 at startup, 1 after first loop iteration)
+        if telemetry_calls >= 3:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[assignment]
+    notifier.scan_once = lambda: None  # type: ignore[assignment]
+
+    notifier.run_loop(stop_event, manual_scan_event)
+
+    # First iteration was manual scan (user active, warning is not sent because is_manual).
+    # Second iteration was user active (warning should be suppressed because _was_paused_by_user_active is True).
+    assert not any("aviso:" in msg for msg in sender.sent_messages)
+

@@ -1054,6 +1054,7 @@ class Notifier:
                     while pause_event.is_set() and not stop_event.is_set():
                         stop_event.wait(0.5)
                     self.status.set_paused(False)
+                    self._was_paused_by_user_active = True
                     if stop_event.is_set():
                         break
 
@@ -1063,6 +1064,7 @@ class Notifier:
                     if is_manual:
                         manual_scan_event.clear()
                         LOGGER.info("Manual scan requested", extra={"category": "control"})
+                        self._was_paused_by_user_active = True
                     if test_message_event is not None and test_message_event.is_set():
                         test_message_event.clear()
                         LOGGER.info("Test message requested", extra={"category": "control"})
@@ -1100,7 +1102,8 @@ class Notifier:
                             self._was_paused_by_user_active = True
                             self._send_user_active_warning()
                     else:
-                        self._was_paused_by_user_active = False
+                        if not is_manual:
+                            self._was_paused_by_user_active = False
                         self.scan_once()
                         if self._last_scan_error:
                             error_count += 1
