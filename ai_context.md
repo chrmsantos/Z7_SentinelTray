@@ -4,7 +4,7 @@
 
 **Z7_SentinelTray** é um notificador Windows que lê texto visível de uma janela de aplicativo alvo e envia e-mail quando uma frase configurada aparece. Roda como processo de console (ou `.exe` nomeado) sem privilégios de administrador.
 
-- **Versão atual:** 6.2.1  
+- **Versão atual:** 6.5.0  
 - **Python:** ≥ 3.11  
 - **Licença:** GPL-3.0-only  
 - **Autor:** CMS
@@ -34,7 +34,7 @@ Z7_SentinelTray/
 │   ├── console_app.py             # Interface de console (menu interativo)
 │   ├── gui_app.py                 # Interface gráfica (tray/janela)
 │   ├── tray_app.py                # Ícone de bandeja do sistema
-│   ├── splash.py                  # Splash screen no startup
+│   ├── updater.py                 # Mecanismo de atualização automática (auto-update)
 │   ├── status.py                  # StatusStore thread-safe e StatusSnapshot imutável
 │   ├── scan_utils.py              # Filtros de deduplicação, debounce, min_repeat
 │   ├── idle_utils.py              # Detecção de ociosidade do usuário
@@ -95,7 +95,6 @@ Z7_SentinelTray/
 main.py → entrypoint.py
   └─ guard single-instance (mutex + PID file)
   └─ load_config()
-  └─ splash screen (thread principal)
   └─ console_app ou gui_app
        └─ Notifier.run()
             ├─ scan loop (poll_interval_seconds)
