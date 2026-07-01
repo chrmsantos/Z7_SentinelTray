@@ -450,39 +450,12 @@ class Notifier:
                 monitor.last_error_notification_at = time.monotonic()
                 self.status.set_last_send(_now_iso())
 
-        if monitor.failure_count >= self.config.window_error_circuit_threshold:
-            breaker_seconds = max(0, self.config.window_error_circuit_seconds)
-            monitor.breaker_until = max(monitor.breaker_until, time.monotonic() + breaker_seconds)
-            if LOGGER.isEnabledFor(logging.WARNING):
-                LOGGER.warning(
-                    "Circuit breaker active for monitor %s (%ss)",
-                    _summarize_text(monitor.key),
-                    breaker_seconds,
-                    extra={"category": "scan"},
-                )
-            if breaker_seconds > 0:
-                critical_message = (
-                    f"erro: monitor pausado por {breaker_seconds}s (muitas falhas consecutivas)"
-                )
-                for current in self._monitors:
-                    if current.key != monitor.key:
-                        continue
-                    self._send_message(
-                        current,
-                        critical_message,
-                        category="error",
-                        force_send=True,
-                    )
-        else:
-            backoff_seconds = self._compute_monitor_backoff_seconds(monitor.failure_count)
-            if backoff_seconds:
-                monitor.breaker_until = max(
-                    monitor.breaker_until, time.monotonic() + backoff_seconds
-                )
+        # Circuit breaker e backoff do monitor desativados para que erros não prejudiquem a continuidade da tentativa de funcionamento
+        monitor.breaker_until = 0.0
         self.status.set_monitor_state(
             monitor.key,
             failure_count=monitor.failure_count,
-            breaker_active=bool(monitor.breaker_until and time.monotonic() < monitor.breaker_until),
+            breaker_active=False,
         )
 
     def scan_once(self) -> None:
@@ -1153,14 +1126,8 @@ class Notifier:
                 if scan_complete_event is not None:
                     scan_complete_event.set()
 
-                backoff_seconds = self._compute_backoff_seconds(error_count)
-                wait_seconds = max(self.config.poll_interval_seconds, backoff_seconds)
-                if backoff_seconds:
-                    LOGGER.info(
-                        "Backoff enabled: %s seconds",
-                        backoff_seconds,
-                        extra={"category": "control"},
-                    )
+                # O backoff foi desativado para que erros não prejudiquem a continuidade da tentativa de funcionamento
+                wait_seconds = self.config.poll_interval_seconds
                 if _wait_for_next_scan(wait_seconds):
                     continue
 

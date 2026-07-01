@@ -158,13 +158,13 @@ monitors:
 - state.json stores the last sent messages to avoid duplicates.
 - Errors detected in each polling iteration are reported via email immediately.
 - When the target window is unavailable or disabled, an alert is sent and the scan is skipped.
-- Monitor failures use a per-monitor circuit breaker and local backoff to avoid alert storms.
+- Monitor failures do not pause scans, allowing the app to keep scanning normally.
 - Email delivery failures are queued locally and retried with exponential backoff.
 - Error notifications are rate-limited via error_notification_cooldown_seconds.
 - Startup test and periodic healthchecks update status/logs but do not send email.
 - When the target window is open, scans restore (if minimized), then ensure it is foreground and maximized before reading text.
 - Phrase matching ignores accents, is case-insensitive, and matches partial text occurrences.
-- Consecutive errors trigger exponential backoff before the next scan.
+- Consecutive errors do not trigger exponential backoff, keeping scan frequency constant.
 - Repeated messages are debounced by time window to avoid spam.
 - Messages identical to the immediately previous scan are skipped.
 - Messages with a lower leading number than the previous scan are skipped.

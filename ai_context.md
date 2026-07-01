@@ -4,7 +4,7 @@
 
 **Z7_SentinelTray** é um notificador Windows que lê texto visível de uma janela de aplicativo alvo e envia e-mail quando uma frase configurada aparece. Roda como processo de console (ou `.exe` nomeado) sem privilégios de administrador.
 
-- **Versão atual:** 6.5.0  
+- **Versão atual:** 6.5.1  
 - **Python:** ≥ 3.11  
 - **Licença:** GPL-3.0-only  
 - **Autor:** CMS
@@ -67,8 +67,8 @@ Z7_SentinelTray/
 
 ### `app.py`
 - **`Notifier`** — classe central; gerencia o loop de scan, healthcheck, erros e envio
-- **`MonitorRuntime`** — estado de runtime por monitor (circuit breaker, backoff, histórico)
-- Loop principal em `run()`: scan periódico, healthcheck, backoff exponencial em erros
+- **`MonitorRuntime`** — estado de runtime por monitor (histórico, circuit breaker/backoff desativados em runtime)
+- Loop principal em `run()`: scan periódico, healthcheck, sem backoff exponencial em erros (funcionamento contínuo)
 - `_send_healthcheck()` — envia status por e-mail; respeitando `healthcheck_send_on_error_only`
 - `_handle_error()` — registra erro, envia notificação com cooldown
 - `scan_once()` — executa uma iteração de varredura em todos os monitores
@@ -100,7 +100,7 @@ main.py → entrypoint.py
             ├─ scan loop (poll_interval_seconds)
             │    └─ detector → scan_utils → email_sender
             ├─ healthcheck (healthcheck_interval_seconds)
-            └─ error backoff (exponencial)
+             └─ sem backoff em erros (contínuo)
 ```
 
 ---
