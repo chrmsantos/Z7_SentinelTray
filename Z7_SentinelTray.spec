@@ -2,8 +2,8 @@
 
 
 a = Analysis(
-    ['C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\main.py'],
-    pathex=['C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\src'],
+    ['C:\\Users\\csantos\\AppData\\Local\\Z7\\Dev\\Z7_SentinelTray\\main.py'],
+    pathex=['C:\\Users\\csantos\\AppData\\Local\\Z7\\Dev\\Z7_SentinelTray\\src'],
     binaries=[],
     datas=[('config/config.local.yaml.example', 'config')],
     hiddenimports=["unicodedata"],
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='C:\\Users\\csantos\\AppData\\Local\\Z7\\Apps\\Z7_SentinelTray\\assets\\icon.ico',
+    icon='C:\\Users\\csantos\\AppData\\Local\\Z7\\Dev\\Z7_SentinelTray\\assets\\icon.ico',
 )

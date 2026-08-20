@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import tkinter as tk
@@ -73,6 +75,173 @@ def _get_target_path() -> Path:
         from .config import get_project_root
         return get_project_root() / "dist" / "Z7_SentinelTray.exe"
     return Path(sys.executable)
+
+
+def _restart_application(exe_path: Path) -> None:
+    """Restart the application using the newly installed executable.
+
+    Uses a layered strategy to maximize success probability regardless of
+    admin privileges or system security restrictions (AppLocker, SRP, etc.).
+
+    Strategy 1 – ``subprocess.Popen``: Launches the new executable as a fully
+        independent process (detached from the current console).  Does NOT
+        require admin rights.  The current process then exits via
+        ``os._exit(0)`` which bypasses Python cleanup and releases file locks
+        immediately.
+
+    Strategy 2 – Temporary ``.cmd`` batch script:  If ``Popen`` fails (e.g.
+        blocked by application-control policy), a small ``.cmd`` script is
+        written to ``%TEMP%``.  The script waits for the current PID to
+        disappear, starts the new executable, and self-deletes.  ``cmd.exe``
+        is almost universally permitted even under strict AppLocker rules.
+
+    Strategy 3 – ``os.startfile``:  Uses the Windows Shell ``ShellExecute``
+        API which is the most permissive launch mechanism.  This is the
+        last-resort fallback.
+
+    If *all* strategies fail the function logs the failures and returns
+    silently so the user can still restart manually.
+
+    Args:
+        exe_path: Absolute path to the new executable to launch.
+    """
+    exe_path = Path(exe_path).resolve()
+    current_pid = os.getpid()
+
+    LOGGER.info(
+        "Preparing to restart application. exe_path=%s, current_pid=%d",
+        exe_path, current_pid, extra={"category": "update"},
+    )
+
+    if not exe_path.exists():
+        LOGGER.error(
+            "Cannot restart: target executable does not exist: %s",
+            exe_path, extra={"category": "update"},
+        )
+        return
+
+    # ── Strategy 1: subprocess.Popen ──────────────────────────────────────
+    _try_restart_popen(exe_path, current_pid)
+
+    # ── Strategy 2: Temporary .cmd batch script ───────────────────────────
+    _try_restart_batch_script(exe_path, current_pid)
+
+    # ── Strategy 3: os.startfile (ShellExecute) ───────────────────────────
+    _try_restart_startfile(exe_path)
+
+    LOGGER.error(
+        "All restart strategies failed. The user must restart the application manually. "
+        "exe_path=%s", exe_path, extra={"category": "update"},
+    )
+
+
+def _try_restart_popen(exe_path: Path, current_pid: int) -> None:
+    """Strategy 1: Launch via subprocess.Popen and hard-exit."""
+    try:
+        LOGGER.info(
+            "Restart strategy 1: subprocess.Popen (exe=%s)", exe_path,
+            extra={"category": "update"},
+        )
+        creation_flags = 0
+        if sys.platform == "win32":
+            # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            creation_flags = 0x00000008 | 0x00000200
+        subprocess.Popen(
+            [str(exe_path)],
+            cwd=str(exe_path.parent),
+            creationflags=creation_flags,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        LOGGER.info(
+            "Restart strategy 1: Popen succeeded. Exiting current process (pid=%d)...",
+            current_pid, extra={"category": "update"},
+        )
+        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+    except Exception as exc:
+        LOGGER.warning(
+            "Restart strategy 1 (subprocess.Popen) failed: %s", exc,
+            extra={"category": "update"},
+        )
+
+
+def _try_restart_batch_script(exe_path: Path, current_pid: int) -> None:
+    """Strategy 2: Temporary .cmd batch script that waits then launches."""
+    try:
+        LOGGER.info(
+            "Restart strategy 2: temporary .cmd batch script",
+            extra={"category": "update"},
+        )
+        bat_content = (
+            "@echo off\r\n"
+            f"set TARGET_PID={current_pid}\r\n"
+            "set /a ATTEMPTS=0\r\n"
+            ":WAIT_LOOP\r\n"
+            'tasklist /FI "PID eq %TARGET_PID%" 2>nul | find /i "%TARGET_PID%" >nul\r\n'
+            "if %ERRORLEVEL%==0 (\r\n"
+            "    set /a ATTEMPTS+=1\r\n"
+            "    if %ATTEMPTS% GEQ 30 goto LAUNCH\r\n"
+            "    timeout /t 1 /nobreak >nul\r\n"
+            "    goto WAIT_LOOP\r\n"
+            ")\r\n"
+            ":LAUNCH\r\n"
+            f'start "" "{exe_path}"\r\n'
+            '(goto) 2>nul & del "%~f0"\r\n'
+        )
+        bat_fd, bat_path_str = tempfile.mkstemp(suffix=".cmd", prefix="z7_restart_")
+        bat_path = Path(bat_path_str)
+        try:
+            os.write(bat_fd, bat_content.encode("utf-8"))
+        finally:
+            os.close(bat_fd)
+
+        LOGGER.info(
+            "Restart strategy 2: batch script written to %s", bat_path,
+            extra={"category": "update"},
+        )
+        creation_flags = 0
+        if sys.platform == "win32":
+            creation_flags = 0x00000008 | 0x00000200
+        subprocess.Popen(
+            ["cmd.exe", "/c", str(bat_path)],
+            creationflags=creation_flags,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        LOGGER.info(
+            "Restart strategy 2: batch script launched. Exiting current process (pid=%d)...",
+            current_pid, extra={"category": "update"},
+        )
+        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+    except Exception as exc:
+        LOGGER.warning(
+            "Restart strategy 2 (batch script) failed: %s", exc,
+            extra={"category": "update"},
+        )
+
+
+def _try_restart_startfile(exe_path: Path) -> None:
+    """Strategy 3: os.startfile (Windows ShellExecute API)."""
+    try:
+        LOGGER.info(
+            "Restart strategy 3: os.startfile (exe=%s)", exe_path,
+            extra={"category": "update"},
+        )
+        os.startfile(str(exe_path))  # type: ignore[attr-defined]
+        LOGGER.info(
+            "Restart strategy 3: startfile succeeded. Exiting current process...",
+            extra={"category": "update"},
+        )
+        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+    except Exception as exc:
+        LOGGER.error(
+            "Restart strategy 3 (os.startfile) also failed: %s", exc,
+            extra={"category": "update"},
+        )
 
 
 class UpdateProgressWindow:
@@ -414,10 +583,11 @@ class UpdateProgressWindow:
             messagebox.showinfo(
                 "Atualização Concluída",
                 "A atualização foi baixada e instalada com sucesso!\n\n"
-                "A nova versão estará ativa na próxima inicialização do aplicativo.",
+                "O aplicativo será reiniciado automaticamente na nova versão.",
                 parent=self.parent,
             )
             self.win.destroy()
+            _restart_application(current_exe)
         except Exception as exc:
             LOGGER.exception("Failed to install update", extra={"category": "update"})
             if temp_dest.exists():
