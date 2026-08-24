@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -22,6 +23,30 @@ if TYPE_CHECKING:
     from .status import StatusStore
 
 LOGGER = logging.getLogger(__name__)
+
+# Strategies 2 and 3 create temp-script files in the OS temp directory.
+# Using a dedicated prefix keeps them easily identifiable for cleanup.
+_RESTART_SCRIPT_PREFIX = "z7_restart_"
+
+# Seconds to wait before attempting the first restart strategy, giving
+# the calling thread time to release file handles (e.g. the installer dialog).
+_RESTART_STRATEGY_DELAY: float = 0.5
+
+# Maximum number of seconds the batch/vbs helper script will wait for the
+# current PID to exit before force-launching the new executable anyway.
+_HELPER_SCRIPT_TIMEOUT_SECS: int = 30
+
+
+def _safe_sleep(seconds: float) -> None:
+    """Sleep for *seconds* without being interrupted by unrelated exceptions.
+
+    A defensive wrapper around ``time.sleep`` that silently absorbs
+    ``OSError``/``ValueError`` which can occur on some Windows builds when
+    the system clock is adjusted mid-sleep.
+    """
+    with contextlib.suppress(OSError, ValueError):
+        time.sleep(seconds)
+
 
 # GitHub URL definitions
 _REPO_API_URL = "https://api.github.com/repos/chrmsantos/z7_sentineltray/releases/latest"
@@ -95,7 +120,17 @@ def _restart_application(exe_path: Path) -> None:
         disappear, starts the new executable, and self-deletes.  ``cmd.exe``
         is almost universally permitted even under strict AppLocker rules.
 
-    Strategy 3 – ``os.startfile``:  Uses the Windows Shell ``ShellExecute``
+    Strategy 3 – Temporary ``.vbs`` VBScript:  Uses ``wscript.exe`` to run
+        a VBScript that waits for the current process to exit, then launches
+        the new executable.  ``wscript.exe`` is a trusted Windows component
+        that is typically allowed even under restrictive security policies
+        where ``.cmd`` and ``.ps1`` may be blocked.
+
+    Strategy 4 – ``powershell.exe Start-Process``:  Uses PowerShell with
+        ``-ExecutionPolicy Bypass`` to launch the new executable.  PowerShell
+        is a standard Windows component available on all modern systems.
+
+    Strategy 5 – ``os.startfile``:  Uses the Windows Shell ``ShellExecute``
         API which is the most permissive launch mechanism.  This is the
         last-resort fallback.
 
@@ -120,13 +155,23 @@ def _restart_application(exe_path: Path) -> None:
         )
         return
 
+    # Brief pause to ensure file handles from the installer dialog and
+    # the calling thread are fully released before launching the new exe.
+    _safe_sleep(_RESTART_STRATEGY_DELAY)
+
     # ── Strategy 1: subprocess.Popen ──────────────────────────────────────
     _try_restart_popen(exe_path, current_pid)
 
     # ── Strategy 2: Temporary .cmd batch script ───────────────────────────
     _try_restart_batch_script(exe_path, current_pid)
 
-    # ── Strategy 3: os.startfile (ShellExecute) ───────────────────────────
+    # ── Strategy 3: Temporary .vbs VBScript ───────────────────────────────
+    _try_restart_vbs_script(exe_path, current_pid)
+
+    # ── Strategy 4: powershell.exe Start-Process ──────────────────────────
+    _try_restart_powershell(exe_path)
+
+    # ── Strategy 5: os.startfile (ShellExecute) ───────────────────────────
     _try_restart_startfile(exe_path)
 
     LOGGER.error(
@@ -178,11 +223,12 @@ def _try_restart_batch_script(exe_path: Path, current_pid: int) -> None:
             "@echo off\r\n"
             f"set TARGET_PID={current_pid}\r\n"
             "set /a ATTEMPTS=0\r\n"
+            f"set /a MAX_ATTEMPTS={_HELPER_SCRIPT_TIMEOUT_SECS}\r\n"
             ":WAIT_LOOP\r\n"
             'tasklist /FI "PID eq %TARGET_PID%" 2>nul | find /i "%TARGET_PID%" >nul\r\n'
             "if %ERRORLEVEL%==0 (\r\n"
             "    set /a ATTEMPTS+=1\r\n"
-            "    if %ATTEMPTS% GEQ 30 goto LAUNCH\r\n"
+            "    if %ATTEMPTS% GEQ %MAX_ATTEMPTS% goto LAUNCH\r\n"
             "    timeout /t 1 /nobreak >nul\r\n"
             "    goto WAIT_LOOP\r\n"
             ")\r\n"
@@ -190,7 +236,9 @@ def _try_restart_batch_script(exe_path: Path, current_pid: int) -> None:
             f'start "" "{exe_path}"\r\n'
             '(goto) 2>nul & del "%~f0"\r\n'
         )
-        bat_fd, bat_path_str = tempfile.mkstemp(suffix=".cmd", prefix="z7_restart_")
+        bat_fd, bat_path_str = tempfile.mkstemp(
+            suffix=".cmd", prefix=_RESTART_SCRIPT_PREFIX,
+        )
         bat_path = Path(bat_path_str)
         try:
             os.write(bat_fd, bat_content.encode("utf-8"))
@@ -224,22 +272,128 @@ def _try_restart_batch_script(exe_path: Path, current_pid: int) -> None:
         )
 
 
-def _try_restart_startfile(exe_path: Path) -> None:
-    """Strategy 3: os.startfile (Windows ShellExecute API)."""
+def _try_restart_vbs_script(exe_path: Path, current_pid: int) -> None:
+    """Strategy 3: Temporary .vbs VBScript via wscript.exe."""
     try:
         LOGGER.info(
-            "Restart strategy 3: os.startfile (exe=%s)", exe_path,
+            "Restart strategy 3: temporary .vbs VBScript via wscript.exe",
+            extra={"category": "update"},
+        )
+        # VBScript: wait for PID to exit, then run the new exe via Shell.
+        # ``wscript.exe`` is a signed Microsoft binary trusted by AppLocker
+        # and Windows Defender, making it one of the lowest-risk launchers.
+        _esc = str(exe_path).replace("\\", "\\\\")
+        vbs_content = (
+            'Set fso = CreateObject("Scripting.FileSystemObject")\r\n'
+            f"targetPID = {current_pid}\r\n"
+            f"maxWait = {_HELPER_SCRIPT_TIMEOUT_SECS}\r\n"
+            "elapsed = 0\r\n"
+            "Do While elapsed < maxWait\r\n"
+            "    Set objWMI = GetObject('winmgmts:\\\\.\root\\cimv2')\r\n"
+            f"    Set colProc = objWMI.ExecQuery(\r\n"
+            f"        'Select ProcessId From Win32_Process Where ProcessId = ' & targetPID)\r\n"
+            "    If colProc.Count = 0 Then Exit Do\r\n"
+            "    WScript.Sleep 1000\r\n"
+            "    elapsed = elapsed + 1\r\n"
+            "Loop\r\n"
+            f'Set objShell = CreateObject("WScript.Shell")\r\n'
+            f'objShell.Run """{_esc}""", 1, False\r\n'
+        )
+        vbs_fd, vbs_path_str = tempfile.mkstemp(
+            suffix=".vbs", prefix=_RESTART_SCRIPT_PREFIX,
+        )
+        vbs_path = Path(vbs_path_str)
+        try:
+            os.write(vbs_fd, vbs_content.encode("utf-8"))
+        finally:
+            os.close(vbs_fd)
+
+        LOGGER.info(
+            "Restart strategy 3: VBScript written to %s", vbs_path,
+            extra={"category": "update"},
+        )
+        creation_flags = 0
+        if sys.platform == "win32":
+            creation_flags = 0x00000008 | 0x00000200
+        subprocess.Popen(
+            ["wscript.exe", str(vbs_path)],
+            creationflags=creation_flags,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        LOGGER.info(
+            "Restart strategy 3: VBScript launched. Exiting current process (pid=%d)...",
+            current_pid, extra={"category": "update"},
+        )
+        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+    except Exception as exc:
+        LOGGER.warning(
+            "Restart strategy 3 (VBScript) failed: %s", exc,
+            extra={"category": "update"},
+        )
+
+
+def _try_restart_powershell(exe_path: Path) -> None:
+    """Strategy 4: Launch via ``powershell.exe Start-Process``."""
+    try:
+        LOGGER.info(
+            "Restart strategy 4: powershell.exe -ExecutionPolicy Bypass (exe=%s)",
+            exe_path,
+            extra={"category": "update"},
+        )
+        _escaped_path = str(exe_path).replace("'", "''")
+        ps_cmd = (
+            f"Start-Process -FilePath '{_escaped_path}' -WorkingDirectory "
+            f"'{exe_path.parent}'"
+        )
+        creation_flags = 0
+        if sys.platform == "win32":
+            creation_flags = 0x00000008 | 0x00000200
+        subprocess.Popen(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy", "Bypass",
+                "-WindowStyle", "Hidden",
+                "-Command", ps_cmd,
+            ],
+            creationflags=creation_flags,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        LOGGER.info(
+            "Restart strategy 4: PowerShell succeeded. Exiting current process...",
+            extra={"category": "update"},
+        )
+        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+    except Exception as exc:
+        LOGGER.warning(
+            "Restart strategy 4 (PowerShell) failed: %s", exc,
+            extra={"category": "update"},
+        )
+
+
+def _try_restart_startfile(exe_path: Path) -> None:
+    """Strategy 5: os.startfile (Windows ShellExecute API)."""
+    try:
+        LOGGER.info(
+            "Restart strategy 5: os.startfile (exe=%s)", exe_path,
             extra={"category": "update"},
         )
         os.startfile(str(exe_path))  # type: ignore[attr-defined]
         LOGGER.info(
-            "Restart strategy 3: startfile succeeded. Exiting current process...",
+            "Restart strategy 5: startfile succeeded. Exiting current process...",
             extra={"category": "update"},
         )
         os._exit(0)  # noqa: SLF001 – intentional hard exit after update
     except Exception as exc:
         LOGGER.error(
-            "Restart strategy 3 (os.startfile) also failed: %s", exc,
+            "Restart strategy 5 (os.startfile) also failed: %s", exc,
             extra={"category": "update"},
         )
 
@@ -583,11 +737,23 @@ class UpdateProgressWindow:
             messagebox.showinfo(
                 "Atualização Concluída",
                 "A atualização foi baixada e instalada com sucesso!\n\n"
-                "O aplicativo será reiniciado automaticamente na nova versão.",
+                "O aplicativo será reiniciado automaticamente na nova versão.\n"
+                "Caso isso não ocorra, feche e reabra o aplicativo manualmente.",
                 parent=self.parent,
             )
             self.win.destroy()
             _restart_application(current_exe)
+            # If we reach here, ALL restart strategies failed and os._exit()
+            # was never called — the process is still alive.  Inform the user
+            # so they can restart manually.
+            messagebox.showwarning(
+                "Reinicialização Manual Necessária",
+                "A atualização foi instalada com sucesso, mas o aplicativo "
+                "não conseguiu reiniciar automaticamente.\n\n"
+                "Por favor, feche e reabra o aplicativo manualmente para "
+                "usar a nova versão.",
+                parent=self.parent,
+            )
         except Exception as exc:
             LOGGER.exception("Failed to install update", extra={"category": "update"})
             if temp_dest.exists():

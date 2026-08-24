@@ -348,7 +348,8 @@ class TestUpdateProcess(unittest.TestCase):
                 mock_msgbox.showinfo.assert_called_once_with(
                     "Atualização Concluída",
                     "A atualização foi baixada e instalada com sucesso!\n\n"
-                    "O aplicativo será reiniciado automaticamente na nova versão.",
+                    "O aplicativo será reiniciado automaticamente na nova versão.\n"
+                    "Caso isso não ocorra, feche e reabra o aplicativo manualmente.",
                     parent=parent,
                 )
 
@@ -598,13 +599,18 @@ class TestRestartApplication(unittest.TestCase):
 
     @patch("z7_sentineltray.updater.os.startfile")
     @patch("z7_sentineltray.updater.subprocess.Popen")
-    def test_strategy1_and_2_fail_falls_to_strategy3(
+    def test_strategy1_and_2_fail_falls_to_strategy3_vbs(
         self, mock_popen, mock_startfile
     ) -> None:
-        """Test that when Popen and batch script fail, os.startfile is tried."""
+        """Test that when Popen and batch script fail, VBScript (strategy 3) is tried."""
         from z7_sentineltray.updater import _restart_application
 
-        mock_popen.side_effect = PermissionError("Access denied")
+        # Strategy 1 fails, Strategy 2 fails, Strategy 3 (VBScript) succeeds
+        mock_popen.side_effect = [
+            PermissionError("Access denied"),
+            PermissionError("Access denied"),
+            MagicMock(),
+        ]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
@@ -614,15 +620,23 @@ class TestRestartApplication(unittest.TestCase):
                 with self.assertRaises(self._ExitCalled):
                     _restart_application(exe_path)
 
-            assert mock_popen.call_count == 2
-            mock_startfile.assert_called_once_with(str(exe_path))
+            assert mock_popen.call_count == 3
+            third_call = mock_popen.call_args_list[2]
+            _args, kwargs = third_call
+            assert "wscript.exe" in _args[0][0]
+            # The .vbs script file should exist and contain the PID
+            vbs_path = Path(_args[0][1])
+            assert vbs_path.exists()
+            vbs_content = vbs_path.read_text(encoding="utf-8")
+            assert f"targetPID = {os.getpid()}" in vbs_content
+            assert str(exe_path.resolve()).replace("\\", "\\\\") in vbs_content
 
     @patch("z7_sentineltray.updater.os.startfile")
     @patch("z7_sentineltray.updater.subprocess.Popen")
     def test_all_strategies_fail_logs_error(
         self, mock_popen, mock_startfile
     ) -> None:
-        """Test that when all strategies fail, error is logged and no exit."""
+        """Test that when all 5 strategies fail, error is logged and no exit."""
         from z7_sentineltray.updater import _restart_application
 
         mock_popen.side_effect = PermissionError("Access denied")
@@ -634,7 +648,8 @@ class TestRestartApplication(unittest.TestCase):
 
             _restart_application(exe_path)
 
-            assert mock_popen.call_count == 2
+            # 4 Popen calls: strategy 1 (direct), 2 (batch), 3 (vbs), 4 (powershell)
+            assert mock_popen.call_count == 4
             mock_startfile.assert_called_once()
 
     def test_nonexistent_exe_logs_error(self) -> None:
@@ -732,6 +747,87 @@ class TestRestartApplication(unittest.TestCase):
             call_args = mock_popen.call_args
             launched_path = Path(call_args[0][0][0])
             assert ".." not in str(launched_path)
+
+    @patch("z7_sentineltray.updater.subprocess.Popen")
+    def test_strategy3_vbs_creates_temp_script_with_prefix(
+        self, mock_popen
+    ) -> None:
+        """Test strategy 3: VBScript file created with correct prefix and extension."""
+        from z7_sentineltray.updater import _restart_application
+
+        mock_popen.side_effect = [
+            PermissionError("denied"),
+            PermissionError("denied"),
+            MagicMock(),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
+            exe_path.write_text("fake_exe", encoding="utf-8")
+
+            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
+                with self.assertRaises(self._ExitCalled):
+                    _restart_application(exe_path)
+
+            third_call_cmd = mock_popen.call_args_list[2][0][0]
+            assert third_call_cmd[0] == "wscript.exe"
+            vbs_path = Path(third_call_cmd[1])
+            assert vbs_path.suffix == ".vbs"
+            assert vbs_path.name.startswith("z7_restart_")
+
+    @patch("z7_sentineltray.updater.subprocess.Popen")
+    def test_strategy4_powershell_passes_args(self, mock_popen) -> None:
+        """Test strategy 4: PowerShell cmd args contain required flags."""
+        from z7_sentineltray.updater import _restart_application
+
+        mock_popen.side_effect = [
+            PermissionError("denied"),
+            PermissionError("denied"),
+            PermissionError("denied"),
+            MagicMock(),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
+            exe_path.write_text("fake_exe", encoding="utf-8")
+
+            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
+                with self.assertRaises(self._ExitCalled):
+                    _restart_application(exe_path)
+
+            cmd = mock_popen.call_args_list[3][0][0]
+            assert cmd[0] == "powershell.exe"
+            assert "-ExecutionPolicy" in cmd
+            assert cmd[cmd.index("-ExecutionPolicy") + 1] == "Bypass"
+            assert "-WindowStyle" in cmd
+            assert cmd[cmd.index("-WindowStyle") + 1] == "Hidden"
+            ps_command = cmd[cmd.index("-Command") + 1]
+            assert "Start-Process" in ps_command
+
+    @patch("z7_sentineltray.updater.subprocess.Popen")
+    def test_strategy4_uses_detached_flags(self, mock_popen) -> None:
+        """Test strategy 4: PowerShell uses DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP."""
+        from z7_sentineltray.updater import _restart_application
+
+        mock_popen.side_effect = [
+            PermissionError("denied"),
+            PermissionError("denied"),
+            PermissionError("denied"),
+            MagicMock(),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
+            exe_path.write_text("fake_exe", encoding="utf-8")
+
+            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
+                with self.assertRaises(self._ExitCalled):
+                    _restart_application(exe_path)
+
+            call_kwargs = mock_popen.call_args_list[3][1]
+            expected_flags = 0x00000008 | 0x00000200
+            assert call_kwargs["creationflags"] == expected_flags
+            assert call_kwargs["close_fds"] is True
 
     @patch("z7_sentineltray.updater._restart_application")
     @patch("z7_sentineltray.updater.urllib.request.urlopen")
