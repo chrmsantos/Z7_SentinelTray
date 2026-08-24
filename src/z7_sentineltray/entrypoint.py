@@ -506,7 +506,7 @@ def _first_run_gui_setup(path: Path) -> None:
         )
 
 
-def main() -> int:  # noqa: C901
+def main() -> int:
     """Parse CLI args, load configuration, and launch the appropriate UI."""
     _setup_boot_logging()
     _ensure_single_instance()
@@ -523,10 +523,6 @@ def main() -> int:  # noqa: C901
             _first_run_gui_setup(local_path)
         _ensure_local_override(local_path)
         config = load_config(str(local_path))
-        missing_passwords = _missing_smtp_passwords(config)
-        if missing_passwords:
-            _prompt_smtp_passwords(missing_passwords)
-            config = load_config(str(local_path))
     except Exception as exc:
         config_error_message = _handle_config_error(local_path, exc)
 
@@ -539,47 +535,9 @@ def main() -> int:  # noqa: C901
             if config is None:
                 raise SystemExit("Configuration not loaded.")
 
-            _captured_local_path = local_path
-
-            def _smtp_validator(root: object, config_holder: list, reload_notifier: object) -> None:
-                import threading
-
-                def _bg() -> None:
-                    try:
-                        auth_failures, _ = _validate_smtp_config(config_holder[0])
-                    except Exception:
-                        LOGGER.exception(
-                            "SMTP validation error during startup",
-                            extra={"category": "config"},
-                        )
-                        return
-                    if not auth_failures:
-                        return
-
-                    def _reprompt() -> None:
-                        for index, _ in auth_failures:
-                            _clear_stored_smtp_password(index)
-                        try:
-                            _prompt_smtp_passwords(auth_failures)
-                        except SystemExit:
-                            return
-                        try:
-                            new_cfg = load_config(str(_captured_local_path))
-                        except Exception:
-                            LOGGER.exception(
-                                "Failed to reload config after SMTP re-prompt",
-                                extra={"category": "config"},
-                            )
-                            return
-                        reload_notifier(new_cfg)
-
-                    root.after(0, _reprompt)
-
-                threading.Thread(target=_bg, daemon=True, name="smtp-validator").start()
-
             from .gui_app import run_gui
 
-            run_gui(config, smtp_validator=_smtp_validator)
+            run_gui(config)
     except Exception:
         LOGGER.exception("Failed to start console UI", extra={"category": "startup"})
         raise SystemExit("Failed to start console UI.") from None

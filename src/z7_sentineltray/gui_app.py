@@ -1190,6 +1190,7 @@ class StatusWindow:
         theme_state: _ThemeState | None = None,
         pause_event: Event | None = None,
         on_edit_recipients: Callable[[], None] | None = None,
+        on_edit_smtp_credentials: Callable[[], None] | None = None,
     ) -> None:
         self._root = root
         self._status = status
@@ -1200,6 +1201,7 @@ class StatusWindow:
         self._theme = theme_state or _ThemeState()
         self._pause_event = pause_event
         self._on_edit_recipients = on_edit_recipients
+        self._on_edit_smtp_credentials = on_edit_smtp_credentials
         self._pause_btn: tk.Button | None = None
         self._visible = False
         self._after_id: str | None = None
@@ -1340,6 +1342,10 @@ class StatusWindow:
             self._make_btn(btn_row, "✉  Destinatários", self._on_edit_recipients, _TEAL).pack(
                 side=tk.LEFT, padx=(0, 6)
             )
+        if self._on_edit_smtp_credentials is not None:
+            self._make_btn(
+                btn_row, "🔑  Credenciais SMTP", self._on_edit_smtp_credentials, _AMBER
+            ).pack(side=tk.LEFT, padx=(0, 6))
         self._make_btn(btn_row, "⚙  Avançado", self._on_open_config, _BTN_DIM).pack(
             side=tk.LEFT, padx=(0, 6)
         )
@@ -2055,7 +2061,7 @@ def _start_notifier(
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 
-def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
+def run_gui(config: AppConfig) -> None:
     """GUI entry point — opens the status window on startup."""
     set_console_visible(False)
 
@@ -2157,6 +2163,7 @@ def run_gui(config: AppConfig, *, smtp_validator: object = None) -> None:
         theme_state=theme,
         pause_event=pause_event,
         on_edit_recipients=open_recipients,
+        on_edit_smtp_credentials=open_smtp_credentials,
     )
 
     # ── Tray icon ─────────────────────────────────────────────────────────────

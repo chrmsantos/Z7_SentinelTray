@@ -4,7 +4,7 @@
 
 **Z7_SentinelTray** é um notificador Windows que lê texto visível de uma janela de aplicativo alvo e envia e-mail quando uma frase configurada aparece. Roda como processo de console (ou `.exe` nomeado) sem privilégios de administrador.
 
-- **Versão atual:** 6.5.1  
+- **Versão atual:** 6.7.0  
 - **Python:** ≥ 3.11  
 - **Licença:** GPL-3.0-only  
 - **Autor:** CMS
