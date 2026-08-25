@@ -1311,20 +1311,15 @@ class StatusWindow:
         ).pack(anchor="e")
 
         self._update_status_var = tk.StringVar(value="Não verificado")
-        _update_row = tk.Frame(meta_frame, bg=_SURFACE)
-        _update_row.pack(anchor="e", pady=(2, 0))
         self._update_status_lbl = tk.Label(
-            _update_row,
+            meta_frame,
             textvariable=self._update_status_var,
             font=("Segoe UI", 8, "bold"),
             fg=_MUTED,
             bg=_SURFACE,
             anchor="e",
         )
-        self._update_status_lbl.pack(side=tk.LEFT, padx=(0, 6))
-        self._make_btn(_update_row, "🚀  Atualizar", self._trigger_update, _GREEN).pack(
-            side=tk.LEFT
-        )
+        self._update_status_lbl.pack(anchor="e", pady=(2, 0))
 
         tk.Frame(r, bg=_BORDER, height=1).pack(fill=tk.X)
 
@@ -1360,6 +1355,9 @@ class StatusWindow:
         theme_label = "☀  Tema Claro" if self._theme.is_dark else "🌙  Tema Escuro"
         self._theme_btn = self._make_btn(btn_row, theme_label, self._toggle_theme, _BTN_DIM)
         self._theme_btn.pack(side=tk.LEFT, padx=(0, 6))
+        self._make_btn(btn_row, "🚀  Atualizar", self._trigger_update, _GREEN).pack(
+            side=tk.LEFT
+        )
 
         self._make_btn(btn_row, "Sair  ✕", self._on_exit, "#5a1a1a").pack(
             side=tk.RIGHT
