@@ -39,7 +39,7 @@ procedimento completo. Em resumo, a ordem é:
 
 - Commits seguem Conventional Commits (ex.: `feat:`, `fix:`, `release:`, `docs:`, `style:`, `bump:`).
 - Nunca faça `git push --force` para branch compartilhada.
-- Tags: `v<MAJOR>.<MINOR>.<PATCH>` (ex.: `v6.7.2`).
+- Tags: `v<MAJOR>.<MINOR>.<PATCH>` (ex.: `v6.8.0`).
 
 ## Para a IA (agente)
 
