@@ -319,7 +319,9 @@ class DiskEmailQueue:
                 raise
             except Exception:
                 failed += 1
-                attempts = int(item.get("attempts", 0)) + 1
+                attempts_raw = item.get("attempts", 0)
+                attempts = int(attempts_raw) if isinstance(attempts_raw, int | str) else 0
+                attempts += 1
                 next_attempt_at = compute_next_attempt(
                     now,
                     attempts=attempts,

@@ -91,7 +91,8 @@ def prune_items(
     for item in items:
         created_raw = item.get("created_at")
         created_at = parse_timestamp(created_raw) if isinstance(created_raw, str) else None
-        attempts = int(item.get("attempts", 0))
+        attempts_raw = item.get("attempts", 0)
+        attempts = int(attempts_raw) if isinstance(attempts_raw, int | str) else 0
         if max_attempts and attempts > max_attempts:
             continue
         if max_age_seconds and created_at and (now - created_at).total_seconds() > max_age_seconds:
@@ -130,12 +131,13 @@ def compute_oldest_age_seconds(items: list[dict[str, object]], now: datetime) ->
     Returns:
         Age in whole seconds of the oldest item, or ``0`` if *items* is empty.
     """
-    created_times = [
-        parse_timestamp(item.get("created_at"))
-        for item in items
-        if isinstance(item.get("created_at"), str)
-    ]
-    created_times = [value for value in created_times if value]
+    created_times: list[datetime] = []
+    for item in items:
+        created_raw = item.get("created_at")
+        if isinstance(created_raw, str):
+            parsed = parse_timestamp(created_raw)
+            if parsed is not None:
+                created_times.append(parsed)
     if not created_times:
         return 0
     oldest = min(created_times)

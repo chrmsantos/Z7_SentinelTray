@@ -14,9 +14,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event, Lock, Thread
 from tkinter import messagebox
+from typing import cast
 
 from .app import Notifier
-from .config import AppConfig, get_config_template_path, get_project_root, get_user_data_dir, load_config
+from .config import AppConfig, get_config_template_path, get_user_data_dir, load_config
 from .dpapi_utils import save_secret
 from .status import StatusStore, format_timestamp
 from .tray_app import TrayIcon, set_console_visible
@@ -45,6 +46,7 @@ _BTN_DIM = "#21262d"  # dim button bg
 
 def _color_hover(hex_color: str) -> str:
     """Return a slightly modified version of *hex_color* for mouse-hover feedback.
+
     Brightens dark colors and darkens light colors.
     """
     h = hex_color.lstrip("#")
@@ -69,7 +71,7 @@ def _color_hover(hex_color: str) -> str:
 
 
 def _get_contrast_fg(hex_color: str) -> str:
-    """Return #ffffff for dark backgrounds and #1f2328 for light backgrounds to ensure optimal contrast."""
+    """Return #ffffff for dark and #1f2328 for light backgrounds (optimal contrast)."""
     h = hex_color.lstrip("#")
     if len(h) != 6:
         return "#ffffff"
@@ -83,10 +85,9 @@ def _get_contrast_fg(hex_color: str) -> str:
     return "#1f2328" if luminance > 150 else "#ffffff"
 
 
-
 def _add_hover(btn: tk.Button, bg: str) -> None:
     """Bind a dynamic brightness/darkness-on-hover effect to *btn*."""
-    btn._normal_bg = bg
+    btn._normal_bg = bg  # type: ignore[attr-defined]
 
     def on_enter(_e: tk.Event) -> None:
         current_bg = getattr(btn, "_normal_bg", btn.cget("bg"))
@@ -142,7 +143,7 @@ _LIGHT_PALETTE: dict[str, str] = {
 }
 
 
-def _apply_theme_walk(root: tk.Widget, old_pal: dict, new_pal: dict) -> None:
+def _apply_theme_walk(root: tk.Misc, old_pal: dict[str, str], new_pal: dict[str, str]) -> None:
     """Recursively remap palette colors across all widgets."""
     color_map = {v: new_pal[k] for k, v in old_pal.items()}
     _OPTS = (  # noqa: N806
@@ -154,10 +155,10 @@ def _apply_theme_walk(root: tk.Widget, old_pal: dict, new_pal: dict) -> None:
         "selectbackground",
     )
 
-    def _remap(w: tk.Widget) -> None:
+    def _remap(w: tk.Misc) -> None:
         normal_bg = getattr(w, "_normal_bg", None)
         if normal_bg in color_map:
-            w._normal_bg = color_map[normal_bg]
+            w._normal_bg = color_map[normal_bg]  # type: ignore[attr-defined]
 
         for opt in _OPTS:
             try:
@@ -211,10 +212,10 @@ class _ThemeState:
         return self._dark
 
     @property
-    def palette(self) -> dict:
+    def palette(self) -> dict[str, str]:
         return _DARK_PALETTE if self._dark else _LIGHT_PALETTE
 
-    def toggle(self, root: tk.Widget) -> None:
+    def toggle(self, root: tk.Misc) -> None:
         old = self.palette
         self._dark = not self._dark
         self._save()
@@ -389,8 +390,8 @@ class ConfigEditorWindow:
         win.grab_set()
 
         try:
-            if self._parent.iconbitmap():
-                win.iconbitmap(self._parent.iconbitmap())
+            if self._parent.iconbitmap():  # type: ignore[no-untyped-call]
+                win.iconbitmap(self._parent.iconbitmap())  # type: ignore[no-untyped-call]
         except Exception:
             pass
 
@@ -515,7 +516,9 @@ class ConfigEditorWindow:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _make_btn(self, parent: tk.Frame, text: str, cmd: Callable[[], None], bg: str) -> tk.Button:
+    def _make_btn(
+        self, parent: tk.Frame, text: str, cmd: Callable[[], object], bg: str
+    ) -> tk.Button:
         fg = _get_contrast_fg(bg)
         btn = tk.Button(
             parent,
@@ -536,13 +539,12 @@ class ConfigEditorWindow:
         return btn
 
     def _restore_defaults(self) -> None:
-        import sys
 
         if not messagebox.askyesno(
             "Restaurar valores padrão",
             "Isso substituirá o conteúdo do editor pelo template padrão.\n"
             "As alterações não salvas serão perdidas. Deseja continuar?",
-            parent=self._win,
+            parent=cast(tk.Misc, self._win),
         ):
             return
         try:
@@ -563,8 +565,6 @@ class ConfigEditorWindow:
     def _load_file(self) -> None:
         self._cfg_path.parent.mkdir(parents=True, exist_ok=True)
         if not self._cfg_path.exists():
-            import sys
-
             try:
                 template_content = get_config_template_path().read_text(encoding="utf-8")
             except Exception:
@@ -1009,6 +1009,7 @@ class SmtpCredentialsDialog:
             def _make_toggle(entry: tk.Entry, var: tk.BooleanVar) -> Callable[[], None]:
                 def _toggle() -> None:
                     entry.config(show="" if var.get() else "*")
+
                 return _toggle
 
             tk.Checkbutton(
@@ -1069,7 +1070,10 @@ class SmtpCredentialsDialog:
             # Auto-sync from_address when it previously matched smtp_username
             synced_from = [
                 new_usernames[i]
-                if old_from_addresses[i] == old_usernames[i] and new_usernames[i] != old_usernames[i]
+                if (
+                    old_from_addresses[i] == old_usernames[i]
+                    and new_usernames[i] != old_usernames[i]
+                )
                 else old_from_addresses[i]
                 for i in range(len(monitors))
             ]
@@ -1217,13 +1221,20 @@ class StatusWindow:
 
         # Initial active windows capture
         import sys
+
         if sys.platform == "win32":
             try:
                 import ctypes
+
                 user32 = ctypes.windll.user32
                 active_titles = []
-                @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-                def enum_proc(hwnd, lParam) -> bool:
+                _enum_proc_type = cast(
+                    "Callable[[Callable[[int, int], bool]], Callable[[int, int], bool]]",
+                    ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p),
+                )
+
+                @_enum_proc_type
+                def enum_proc(hwnd: int, lparam: int) -> bool:
                     if user32.IsWindowVisible(hwnd):
                         length = user32.GetWindowTextLengthW(hwnd)
                         if length > 0:
@@ -1233,6 +1244,7 @@ class StatusWindow:
                             if title and title != "Program Manager":
                                 active_titles.append(title)
                     return True
+
                 user32.EnumWindows(enum_proc, 0)
                 self._status.set_active_windows(active_titles)
             except Exception:
@@ -1263,7 +1275,7 @@ class StatusWindow:
 
             ico = _gpr() / "assets" / "icon.ico"
             if ico.exists():
-                r.iconbitmap(str(ico))
+                r.iconbitmap(str(ico))  # type: ignore[no-untyped-call]
         except Exception:
             pass
 
@@ -1355,13 +1367,9 @@ class StatusWindow:
         theme_label = "☀  Tema Claro" if self._theme.is_dark else "🌙  Tema Escuro"
         self._theme_btn = self._make_btn(btn_row, theme_label, self._toggle_theme, _BTN_DIM)
         self._theme_btn.pack(side=tk.LEFT, padx=(0, 6))
-        self._make_btn(btn_row, "🚀  Atualizar", self._trigger_update, _GREEN).pack(
-            side=tk.LEFT
-        )
+        self._make_btn(btn_row, "🚀  Atualizar", self._trigger_update, _GREEN).pack(side=tk.LEFT)
 
-        self._make_btn(btn_row, "Sair  ✕", self._on_exit, "#5a1a1a").pack(
-            side=tk.RIGHT
-        )
+        self._make_btn(btn_row, "Sair  ✕", self._on_exit, "#5a1a1a").pack(side=tk.RIGHT)
 
         # Lower row: Copyright and motto text
         text_row = tk.Frame(footer, bg=_SURFACE)
@@ -1452,29 +1460,32 @@ class StatusWindow:
         win_container.pack(fill=tk.BOTH, expand=True)
 
         self._win_canvas = tk.Canvas(win_container, bg=_CARD, highlightthickness=0)
-        win_scrollbar = tk.Scrollbar(win_container, orient=tk.VERTICAL, command=self._win_canvas.yview)
+        win_scrollbar = tk.Scrollbar(
+            win_container, orient=tk.VERTICAL, command=self._win_canvas.yview
+        )
         self._win_scrollable = tk.Frame(self._win_canvas, bg=_CARD)
 
         self._win_scrollable.bind(
             "<Configure>",
-            lambda e: self._win_canvas.configure(
-                scrollregion=self._win_canvas.bbox("all")
-            )
+            lambda e: self._win_canvas.configure(scrollregion=self._win_canvas.bbox("all")),
         )
 
-        self._win_canvas_window = self._win_canvas.create_window((0, 0), window=self._win_scrollable, anchor="nw")
+        self._win_canvas_window = self._win_canvas.create_window(
+            (0, 0), window=self._win_scrollable, anchor="nw"
+        )
 
         self._win_canvas.bind(
             "<Configure>",
-            lambda e: self._win_canvas.itemconfigure(self._win_canvas_window, width=e.width)
+            lambda e: self._win_canvas.itemconfigure(self._win_canvas_window, width=e.width),
         )
 
         self._win_canvas.configure(yscrollcommand=win_scrollbar.set)
         self._win_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         win_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        def _on_mousewheel(event) -> None:
+        def _on_mousewheel(event: tk.Event) -> None:
             self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
         self._win_canvas.bind("<MouseWheel>", _on_mousewheel)
         self._win_scrollable.bind("<MouseWheel>", _on_mousewheel)
 
@@ -1562,7 +1573,9 @@ class StatusWindow:
             lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self._value_labels[key] = lbl
 
-    def _make_btn(self, parent: tk.Frame, text: str, cmd: Callable[[], None], bg: str) -> tk.Button:
+    def _make_btn(
+        self, parent: tk.Frame, text: str, cmd: Callable[[], object], bg: str
+    ) -> tk.Button:
         fg = _get_contrast_fg(bg)
         btn = tk.Button(
             parent,
@@ -1663,7 +1676,7 @@ class StatusWindow:
         if self._visible:
             self._schedule_refresh()
 
-    def _update_ui(self) -> None:
+    def _update_ui(self) -> None:  # noqa: C901
         snap = self._status.snapshot()
         cfg = self._get_config()
 
@@ -1848,12 +1861,13 @@ class StatusWindow:
             )
             lbl.pack(fill=tk.X, pady=2, padx=4)
 
-            def _on_scroll(event) -> None:
+            def _on_scroll_label(event: tk.Event) -> None:
                 self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            lbl.bind("<MouseWheel>", _on_scroll)
+
+            lbl.bind("<MouseWheel>", _on_scroll_label)
             return
 
-        def _on_scroll(event) -> None:
+        def _on_scroll(event: tk.Event) -> None:
             self._win_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         for _idx, title in enumerate(active_windows, start=1):
@@ -1908,6 +1922,7 @@ class StatusWindow:
 
     def _trigger_update(self) -> None:
         from . import __version__
+
         run_update_check(self._root, self._theme, __version__, status=self._status)
 
 
@@ -2061,7 +2076,7 @@ def _start_notifier(
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 
-def run_gui(config: AppConfig) -> None:
+def run_gui(config: AppConfig) -> None:  # noqa: C901
     """GUI entry point — opens the status window on startup."""
     set_console_visible(False)
 
@@ -2182,6 +2197,7 @@ def run_gui(config: AppConfig) -> None:
     # ── Check for updates on startup ──────────────────────────────────────────
     def _startup_update_check() -> None:
         from . import __version__
+
         run_update_check(root, theme, __version__, on_startup=True, status=status)
 
     root.after(1000, _startup_update_check)
@@ -2205,10 +2221,9 @@ def run_gui(config: AppConfig) -> None:
                 try:
                     tray.stop()
                     tray.start()
-                except Exception as exc:
+                except Exception:
                     LOGGER.exception(
-                        "Failed to restart tray icon: %s",
-                        exc,
+                        "Failed to restart tray icon",
                         extra={"category": "startup"},
                     )
 

@@ -8,9 +8,10 @@ import logging
 import math
 import threading
 from collections.abc import Callable
+from typing import cast
 
-import pystray  # type: ignore[import]
-from PIL import Image, ImageDraw  # type: ignore[import]
+import pystray
+from PIL import Image, ImageDraw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -96,12 +97,12 @@ def _make_green_eye(size: int = 64) -> Image.Image:
         ey_end = int(sy + lash_len * math.sin(angle_rad))
         border.line([sx, sy, ex_end, ey_end], fill=lash_color, width=lash_w)
 
-    return result.resize((size, size), Image.LANCZOS)
+    return result.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def _console_hwnd() -> int:
     try:
-        return int(ctypes.windll.kernel32.GetConsoleWindow())  # type: ignore[attr-defined]
+        return int(ctypes.windll.kernel32.GetConsoleWindow())
     except Exception:
         return 0
 
@@ -116,11 +117,14 @@ def set_console_visible(visible: bool) -> None:
     if not hwnd:
         return
     with contextlib.suppress(Exception):
-        ctypes.windll.user32.ShowWindow(hwnd, _SW_SHOW if visible else _SW_HIDE)  # type: ignore[attr-defined]
+        ctypes.windll.user32.ShowWindow(hwnd, _SW_SHOW if visible else _SW_HIDE)
 
 
 _CTRL_CLOSE_EVENT = 2
-_HandlerRoutine = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)  # type: ignore[attr-defined]
+_HandlerRoutine = cast(
+    "Callable[[Callable[[int], bool]], Callable[[int], bool]]",
+    ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint),
+)
 
 
 def _install_close_to_tray_handler(tray: TrayIcon) -> object:
@@ -138,7 +142,7 @@ def _install_close_to_tray_handler(tray: TrayIcon) -> object:
         return False
 
     try:
-        ctypes.windll.kernel32.SetConsoleCtrlHandler(_handler, True)  # type: ignore[attr-defined]
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(_handler, True)
     except Exception as exc:
         LOGGER.debug("SetConsoleCtrlHandler install failed: %s", exc)
     return _handler
@@ -190,9 +194,7 @@ class TrayIcon:
         self._icon = None
         self._on_exit_requested()
         if icon_ref is not None:
-            threading.Thread(
-                target=icon_ref.stop, daemon=True, name="tray-exit-stop"
-            ).start()
+            threading.Thread(target=icon_ref.stop, daemon=True, name="tray-exit-stop").start()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -240,7 +242,7 @@ class TrayIcon:
         """Stop the tray icon."""
         if self._close_handler is not None:
             try:
-                ctypes.windll.kernel32.SetConsoleCtrlHandler(self._close_handler, False)  # type: ignore[attr-defined]
+                ctypes.windll.kernel32.SetConsoleCtrlHandler(self._close_handler, False)
             except Exception as exc:
                 LOGGER.debug("SetConsoleCtrlHandler uninstall failed: %s", exc)
             self._close_handler = None

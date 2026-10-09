@@ -13,7 +13,7 @@ from z7_sentineltray.config import (
     get_user_data_dir,
     get_user_log_dir,
 )
-from z7_sentineltray.detector import WindowUnavailableError, WindowTextDetector
+from z7_sentineltray.detector import WindowTextDetector, WindowUnavailableError
 from z7_sentineltray.status import StatusStore
 
 
@@ -174,12 +174,18 @@ def test_window_unavailable_when_screen_locked(monkeypatch: pytest.MonkeyPatch, 
 
     snapshot = notifier.status.snapshot()
     assert snapshot.error_count == 0
-    assert snapshot.last_error == _safe_status_text("erro: janela indisponível: Target window not enabled (a tela do usuário do windows está bloqueada)")
+    expected_error = _safe_status_text(
+        "erro: janela indisponível: Target window not enabled "
+        "(a tela do usuário do windows está bloqueada)"
+    )
+    assert snapshot.last_error == expected_error
     assert len(sends) == 1
     assert _safe_status_text(" (a tela do usuário do windows está bloqueada)") in sends[0]
 
 
-def test_scan_once_window_unavailable_when_screen_locked(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_scan_once_window_unavailable_when_screen_locked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     base = get_user_data_dir()
     log_root = get_user_log_dir()
@@ -245,7 +251,10 @@ def test_scan_once_window_unavailable_when_screen_locked(monkeypatch: pytest.Mon
     notifier.scan_once()
 
     snapshot = notifier.status.snapshot()
-    assert snapshot.last_error == _safe_status_text("erro: janela indisponível: Target window not found (a tela do usuário do windows está bloqueada)")
+    expected_error = _safe_status_text(
+        "erro: janela indisponível: Target window not found "
+        "(a tela do usuário do windows está bloqueada)"
+    )
+    assert snapshot.last_error == expected_error
     assert len(sends) == 1
     assert " (a tela do usuário do windows está bloqueada)" in sends[0]
-

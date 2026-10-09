@@ -14,11 +14,12 @@ try:
 
     _PYWINAUTO_IMPORT_ERROR: Exception | None = None
 except Exception as exc:  # pragma: no cover - optional dependency
-    Desktop = None  # type: ignore[assignment]
+    Desktop = None
 
-    class ElementAmbiguousError(RuntimeError):
+    class _FallbackElementAmbiguousError(RuntimeError):
         """Fallback error when pywinauto is unavailable."""
 
+    ElementAmbiguousError = _FallbackElementAmbiguousError
     _PYWINAUTO_IMPORT_ERROR = exc
 
 LOGGER = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class WindowTextDetector:
     ) -> None:
         self._window_title_regex = re.compile(window_title_regex)
         self._allow_window_restore = allow_window_restore
-        self._last_window = None
+        self._last_window: object | None = None
         self._log_throttle_seconds = max(0, log_throttle_seconds)
         self._last_log: dict[str, float] = {}
         self._phrase_regex_cache: str | None = None
@@ -78,7 +79,7 @@ class WindowTextDetector:
             if self._window_is_minimized(window):
                 return True
             if hasattr(window, "is_visible"):
-                return window.is_visible()
+                return bool(window.is_visible())
         except Exception:
             return False
         else:
@@ -99,7 +100,7 @@ class WindowTextDetector:
             if hasattr(window, "handle"):
                 handle = window.handle
                 if handle:
-                    return ctypes.windll.user32.GetForegroundWindow() == handle
+                    return bool(ctypes.windll.user32.GetForegroundWindow() == handle)
         except Exception:
             return False
         return False
@@ -366,6 +367,8 @@ class WindowTextDetector:
         titles: list[str] = []
         for window in candidates:
             try:
+                if not hasattr(window, "window_text"):
+                    continue
                 title_text = window.window_text()
             except Exception:
                 continue
@@ -397,7 +400,8 @@ class WindowTextDetector:
                             texts.append(title_text)
                 except Exception:
                     LOGGER.debug("Failed to read window title text", exc_info=True)
-                for element in window.descendants():
+                descendants = window.descendants() if hasattr(window, "descendants") else []
+                for element in descendants:
                     try:
                         text = element.window_text()
                     except Exception:

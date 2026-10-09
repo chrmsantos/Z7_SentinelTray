@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from z7_sentineltray.status import StatusStore
-from z7_sentineltray.updater import UpdateProgressWindow, _restart_application, parse_version, run_update_check
+from z7_sentineltray.updater import UpdateProgressWindow, parse_version, run_update_check
 
 
 class TestUpdater(unittest.TestCase):
@@ -102,8 +103,10 @@ class MockResponse:
         class Info:
             def __init__(self, headers):
                 self.headers = headers
+
             def get(self, key, default=None):
                 return self.headers.get(key, default)
+
         return Info(self.headers)
 
     def __enter__(self):
@@ -127,8 +130,11 @@ class TestUpdateProcess(unittest.TestCase):
             "prerelease": False,
             "draft": False,
             "assets": [
-                {"name": "Z7_SentinelTray.exe", "browser_download_url": "http://example.com/download"}
-            ]
+                {
+                    "name": "Z7_SentinelTray.exe",
+                    "browser_download_url": "http://example.com/download",
+                }
+            ],
         }
         # Use side_effect list so each urlopen() call gets a fresh MockResponse (data not consumed).
         payload = json.dumps(release_data).encode("utf-8")
@@ -167,7 +173,7 @@ class TestUpdateProcess(unittest.TestCase):
             "draft": False,
             "assets": [
                 {"name": "source.tar.gz", "browser_download_url": "http://example.com/source"}
-            ]
+            ],
         }
         mock_urlopen.return_value = MockResponse(json.dumps(release_data).encode("utf-8"))
 
@@ -182,7 +188,8 @@ class TestUpdateProcess(unittest.TestCase):
         assert status.snapshot().update_status == "Atualização disponível (v6.2.0)"
         mock_msgbox.showwarning.assert_called_once_with(
             "Atualização",
-            "A versão v6.2.0 está disponível, mas nenhum executável compatível foi encontrado no GitHub.",
+            "A versão v6.2.0 está disponível, mas nenhum executável "
+            "compatível foi encontrado no GitHub.",
             parent=parent,
         )
 
@@ -196,8 +203,11 @@ class TestUpdateProcess(unittest.TestCase):
             "prerelease": False,
             "draft": False,
             "assets": [
-                {"name": "Z7_SentinelTray.exe", "browser_download_url": "http://example.com/download"}
-            ]
+                {
+                    "name": "Z7_SentinelTray.exe",
+                    "browser_download_url": "http://example.com/download",
+                }
+            ],
         }
         mock_urlopen.return_value = MockResponse(json.dumps(release_data).encode("utf-8"))
         mock_msgbox.askyesno.return_value = False  # User clicks No
@@ -223,8 +233,11 @@ class TestUpdateProcess(unittest.TestCase):
             "prerelease": False,
             "draft": False,
             "assets": [
-                {"name": "Z7_SentinelTray.exe", "browser_download_url": "http://example.com/download"}
-            ]
+                {
+                    "name": "Z7_SentinelTray.exe",
+                    "browser_download_url": "http://example.com/download",
+                }
+            ],
         }
         mock_urlopen.return_value = MockResponse(json.dumps(release_data).encode("utf-8"))
 
@@ -250,8 +263,11 @@ class TestUpdateProcess(unittest.TestCase):
             "prerelease": False,
             "draft": False,
             "assets": [
-                {"name": "Z7_SentinelTray.exe", "browser_download_url": "http://example.com/download"}
-            ]
+                {
+                    "name": "Z7_SentinelTray.exe",
+                    "browser_download_url": "http://example.com/download",
+                }
+            ],
         }
         mock_urlopen.side_effect = [
             MockResponse(json.dumps(release_data).encode("utf-8")),
@@ -261,9 +277,10 @@ class TestUpdateProcess(unittest.TestCase):
         # Execute win.after(delay, func) callbacks synchronously so _finalize_update fires.
         mock_tk.Toplevel.return_value.after.side_effect = lambda delay, func: func()
 
-        with patch("sys.frozen", False, create=True), \
-             patch("z7_sentineltray.config.get_project_root") as mock_root:
-
+        with (
+            patch("sys.frozen", False, create=True),
+            patch("z7_sentineltray.config.get_project_root") as mock_root,
+        ):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tmp_path = Path(tmp_dir)
                 mock_root.return_value = tmp_path
@@ -274,7 +291,7 @@ class TestUpdateProcess(unittest.TestCase):
                 with patch("z7_sentineltray.updater.sys.executable", str(fake_exe)):
                     status = StatusStore()
                     parent = MagicMock()
-                    # Execute parent.after(delay, func) callbacks synchronously so messagebox calls fire.
+                    # Execute parent.after(delay, func) callbacks synchronously.
                     parent.after.side_effect = lambda delay, func: func()
                     theme = DummyTheme()
 
@@ -296,7 +313,14 @@ class TestUpdateProcess(unittest.TestCase):
     @patch("subprocess.Popen")
     @patch("z7_sentineltray.updater.threading.Thread", SynchronousThread)
     def test_update_download_success_frozen_mode(
-        self, mock_popen, mock_close_handle, mock_ttk, mock_tk, mock_msgbox, mock_urlopen, mock_restart
+        self,
+        mock_popen,
+        mock_close_handle,
+        mock_ttk,
+        mock_tk,
+        mock_msgbox,
+        mock_urlopen,
+        mock_restart,
     ) -> None:
         """Test complete update installation flow in frozen (production) mode."""
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -304,7 +328,9 @@ class TestUpdateProcess(unittest.TestCase):
             temp_exe = tmp_path / "Z7_SentinelTray.exe"
             temp_exe.write_text("original_content", encoding="utf-8")
 
-            mock_urlopen.return_value = MockResponse(b"updated_frozen_exe_payload", {"Content-Length": "26"})
+            mock_urlopen.return_value = MockResponse(
+                b"updated_frozen_exe_payload", {"Content-Length": "26"}
+            )
 
             parent = MagicMock()
             theme = DummyTheme()
@@ -312,15 +338,17 @@ class TestUpdateProcess(unittest.TestCase):
             mock_tk.Toplevel.return_value.after.side_effect = lambda delay, func: func()
 
             from z7_sentineltray import entrypoint
+
             entrypoint._mutex_handle = 12345
             pid_file = tmp_path / "z7_sentineltray.pid"
             pid_file.write_text("9999", encoding="utf-8")
 
-            with patch("sys.frozen", True, create=True), \
-                 patch("z7_sentineltray.updater.sys.executable", str(temp_exe)), \
-                 patch("z7_sentineltray.entrypoint._pid_file_path", return_value=pid_file), \
-                 patch.dict(os.environ, {"_MEIPASS": "old_mei_dir", "OTHER_VAR": "keep_this"}):
-
+            with (
+                patch("sys.frozen", True, create=True),
+                patch("z7_sentineltray.updater.sys.executable", str(temp_exe)),
+                patch("z7_sentineltray.entrypoint._pid_file_path", return_value=pid_file),
+                patch.dict(os.environ, {"_MEIPASS": "old_mei_dir", "OTHER_VAR": "keep_this"}),
+            ):
                 UpdateProgressWindow(parent, theme, "http://example.com/download", temp_exe)
 
                 # Verify file system changes
@@ -361,7 +389,9 @@ class TestUpdateProcess(unittest.TestCase):
     @patch("z7_sentineltray.updater.tk")
     @patch("z7_sentineltray.updater.ttk")
     @patch("z7_sentineltray.updater.threading.Thread", NoAutoStartThread)
-    def test_update_download_cancellation(self, mock_ttk, mock_tk, mock_msgbox, mock_urlopen) -> None:
+    def test_update_download_cancellation(
+        self, mock_ttk, mock_tk, mock_msgbox, mock_urlopen
+    ) -> None:
         """Test mid-download cancellation requested by the user."""
         mock_msgbox.askyesno.return_value = True
 
@@ -398,7 +428,9 @@ class TestUpdateProcess(unittest.TestCase):
     @patch("z7_sentineltray.updater.tk")
     @patch("z7_sentineltray.updater.ttk")
     @patch("z7_sentineltray.updater.threading.Thread", SynchronousThread)
-    def test_update_download_network_error(self, mock_ttk, mock_tk, mock_msgbox, mock_urlopen) -> None:
+    def test_update_download_network_error(
+        self, mock_ttk, mock_tk, mock_msgbox, mock_urlopen
+    ) -> None:
         """Test update download error handling when network connection times out."""
         mock_urlopen.side_effect = TimeoutError("Connection timed out")
 
@@ -461,15 +493,20 @@ class TestUpdateProcess(unittest.TestCase):
     @patch("z7_sentineltray.updater.messagebox")
     @patch("z7_sentineltray.updater.check_write_permission")
     @patch("z7_sentineltray.updater.threading.Thread", SynchronousThread)
-    def test_update_check_write_permission_denied(self, mock_check_write, mock_msgbox, mock_urlopen) -> None:
+    def test_update_check_write_permission_denied(
+        self, mock_check_write, mock_msgbox, mock_urlopen
+    ) -> None:
         """Test that update check handles write permission denial without prompting to download."""
         release_data = {
             "tag_name": "v6.2.0",
             "prerelease": False,
             "draft": False,
             "assets": [
-                {"name": "Z7_SentinelTray.exe", "browser_download_url": "http://example.com/download"}
-            ]
+                {
+                    "name": "Z7_SentinelTray.exe",
+                    "browser_download_url": "http://example.com/download",
+                }
+            ],
         }
         mock_urlopen.return_value = MockResponse(json.dumps(release_data).encode("utf-8"))
         mock_check_write.return_value = False  # Simulate write permission denied
@@ -504,7 +541,9 @@ class TestUpdateProcess(unittest.TestCase):
             temp_exe = tmp_path / "Z7_SentinelTray.exe"
             temp_exe.write_text("original_content", encoding="utf-8")
 
-            mock_urlopen.return_value = MockResponse(b"updated_frozen_exe_payload", {"Content-Length": "26"})
+            mock_urlopen.return_value = MockResponse(
+                b"updated_frozen_exe_payload", {"Content-Length": "26"}
+            )
 
             parent = MagicMock()
             theme = DummyTheme()
@@ -515,6 +554,7 @@ class TestUpdateProcess(unittest.TestCase):
             # 2. Second rename (temp to current) fails with PermissionError.
             # 3. Third rename (restore old to current) succeeds.
             calls = []
+
             def side_effect(src, dst):
                 calls.append((src, dst))
                 if len(calls) == 2:
@@ -523,10 +563,13 @@ class TestUpdateProcess(unittest.TestCase):
 
             mock_rename.side_effect = side_effect
 
-            with patch("sys.frozen", True, create=True), \
-                 patch("z7_sentineltray.updater.sys.executable", str(temp_exe)):
-
-                window = UpdateProgressWindow(parent, theme, "http://example.com/download", temp_exe)
+            with (
+                patch("sys.frozen", True, create=True),
+                patch("z7_sentineltray.updater.sys.executable", str(temp_exe)),
+            ):
+                window = UpdateProgressWindow(
+                    parent, theme, "http://example.com/download", temp_exe
+                )
 
                 # Verify that rename failed, but backup restore was triggered
                 # First call: rename current_exe -> old_exe
@@ -555,8 +598,10 @@ class TestRestartApplication(unittest.TestCase):
 
     def _make_exit_side_effect(self):
         """Create a side effect for os._exit that raises _ExitCalled."""
+
         def side_effect(code=0):
             raise self._ExitCalled(code)
+
         return side_effect
 
     @patch("z7_sentineltray.updater.subprocess.Popen")
@@ -568,8 +613,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             mock_popen.assert_called_once()
@@ -577,9 +624,7 @@ class TestRestartApplication(unittest.TestCase):
             assert str(exe_path) in call_args[0][0]
 
     @patch("z7_sentineltray.updater.subprocess.Popen")
-    def test_strategy1_popen_fails_falls_to_strategy2(
-        self, mock_popen
-    ) -> None:
+    def test_strategy1_popen_fails_falls_to_strategy2(self, mock_popen) -> None:
         """Test that when Popen fails, Strategy 2 (batch script) is tried."""
         from z7_sentineltray.updater import _restart_application
 
@@ -589,8 +634,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             assert mock_popen.call_count == 2
@@ -599,9 +646,7 @@ class TestRestartApplication(unittest.TestCase):
 
     @patch("z7_sentineltray.updater.os.startfile")
     @patch("z7_sentineltray.updater.subprocess.Popen")
-    def test_strategy1_and_2_fail_falls_to_strategy3_vbs(
-        self, mock_popen, mock_startfile
-    ) -> None:
+    def test_strategy1_and_2_fail_falls_to_strategy3_vbs(self, mock_popen, mock_startfile) -> None:
         """Test that when Popen and batch script fail, VBScript (strategy 3) is tried."""
         from z7_sentineltray.updater import _restart_application
 
@@ -616,13 +661,15 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             assert mock_popen.call_count == 3
             third_call = mock_popen.call_args_list[2]
-            _args, kwargs = third_call
+            _args, _ = third_call
             assert "wscript.exe" in _args[0][0]
             # The .vbs script file should exist and contain the PID
             vbs_path = Path(_args[0][1])
@@ -633,9 +680,7 @@ class TestRestartApplication(unittest.TestCase):
 
     @patch("z7_sentineltray.updater.os.startfile")
     @patch("z7_sentineltray.updater.subprocess.Popen")
-    def test_all_strategies_fail_logs_error(
-        self, mock_popen, mock_startfile
-    ) -> None:
+    def test_all_strategies_fail_logs_error(self, mock_popen, mock_startfile) -> None:
         """Test that when all 5 strategies fail, error is logged and no exit."""
         from z7_sentineltray.updater import _restart_application
 
@@ -658,8 +703,10 @@ class TestRestartApplication(unittest.TestCase):
 
         fake_path = Path("/nonexistent/path/Z7_SentinelTray.exe")
 
-        with patch("z7_sentineltray.updater.subprocess.Popen") as mock_popen, \
-             patch("z7_sentineltray.updater.os.startfile") as mock_startfile:
+        with (
+            patch("z7_sentineltray.updater.subprocess.Popen") as mock_popen,
+            patch("z7_sentineltray.updater.os.startfile") as mock_startfile,
+        ):
             _restart_application(fake_path)
 
             mock_popen.assert_not_called()
@@ -674,8 +721,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             call_kwargs = mock_popen.call_args[1]
@@ -694,8 +743,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             second_call = mock_popen.call_args_list[1]
@@ -717,8 +768,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             second_call = mock_popen.call_args_list[1]
@@ -740,8 +793,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = subdir / ".." / "Z7_SentinelTray.exe"
             exe_path.resolve().write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             call_args = mock_popen.call_args
@@ -749,9 +804,7 @@ class TestRestartApplication(unittest.TestCase):
             assert ".." not in str(launched_path)
 
     @patch("z7_sentineltray.updater.subprocess.Popen")
-    def test_strategy3_vbs_creates_temp_script_with_prefix(
-        self, mock_popen
-    ) -> None:
+    def test_strategy3_vbs_creates_temp_script_with_prefix(self, mock_popen) -> None:
         """Test strategy 3: VBScript file created with correct prefix and extension."""
         from z7_sentineltray.updater import _restart_application
 
@@ -765,8 +818,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             third_call_cmd = mock_popen.call_args_list[2][0][0]
@@ -791,8 +846,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             cmd = mock_popen.call_args_list[3][0][0]
@@ -820,8 +877,10 @@ class TestRestartApplication(unittest.TestCase):
             exe_path = Path(tmp_dir) / "Z7_SentinelTray.exe"
             exe_path.write_text("fake_exe", encoding="utf-8")
 
-            with patch("z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()):
-                with self.assertRaises(self._ExitCalled):
+            with patch(
+                "z7_sentineltray.updater.os._exit", side_effect=self._make_exit_side_effect()
+            ):
+                with pytest.raises(self._ExitCalled):
                     _restart_application(exe_path)
 
             call_kwargs = mock_popen.call_args_list[3][1]
@@ -852,12 +911,11 @@ class TestRestartApplication(unittest.TestCase):
             theme = DummyTheme()
             mock_tk.Toplevel.return_value.after.side_effect = lambda delay, func: func()
 
-            with patch("sys.frozen", True, create=True), \
-                 patch("z7_sentineltray.updater.sys.executable", str(temp_exe)):
-
-                window = UpdateProgressWindow(
-                    parent, theme, "http://example.com/download", temp_exe
-                )
+            with (
+                patch("sys.frozen", True, create=True),
+                patch("z7_sentineltray.updater.sys.executable", str(temp_exe)),
+            ):
+                UpdateProgressWindow(parent, theme, "http://example.com/download", temp_exe)
 
                 # Verify the success message mentions restart
                 mock_msgbox.showinfo.assert_called_once()

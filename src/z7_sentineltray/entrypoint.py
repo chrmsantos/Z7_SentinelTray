@@ -14,7 +14,14 @@ import sys
 from pathlib import Path
 
 from . import __release_date__, __version_label__
-from .config import AppConfig, get_config_template_path, get_project_root, get_user_data_dir, get_user_log_dir, load_config
+from .config import (
+    AppConfig,
+    get_config_template_path,
+    get_project_root,
+    get_user_data_dir,
+    get_user_log_dir,
+    load_config,
+)
 from .logging_setup import setup_logging
 
 LOGGER = logging.getLogger(__name__)
@@ -413,11 +420,12 @@ def _validate_smtp_config(config: AppConfig) -> tuple[list[tuple[int, str]], lis
 
 
 def _ensure_windows() -> None:
-    if sys.platform == "win32":
+    platform_name: str = sys.platform
+    if platform_name == "win32":
         return
     LOGGER.error(
         "Unsupported platform: %s (Z7_SentinelTray requires Windows)",
-        sys.platform,
+        platform_name,
         extra={"category": "startup"},
     )
     raise SystemExit("Z7_SentinelTray requires Windows.")

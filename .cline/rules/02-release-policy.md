@@ -18,7 +18,7 @@ corretamente para todos os usuários finais.
 Use o skill `build-and-deploy` (slash command `/build-and-deploy`) para o
 procedimento completo. Em resumo, a ordem é:
 
-1. **Bump de versão** em `pyproject.toml` **e** `AI_CONTEXT.md` (sincronizados).
+1. **Bump de versão** em `pyproject.toml` **e** `01-project-architecture.md` (sincronizados).
 2. **Validar** com pytest + mypy + ruff (skill `run-tests`).
 3. **Build** via `scripts\build_named_exe.cmd` → gera `dist\Z7_SentinelTray.exe`.
 4. **Verificar** que o `.exe` existe e tem tamanho > 0.
@@ -30,7 +30,7 @@ procedimento completo. Em resumo, a ordem é:
 
 - **PyInstaller trunca o build**: rode sempre com `--clean --noconfirm` (já configurado em `build_named_exe.ps1`).
 - **Asset ausente na release**: confirme que `dist/Z7_SentinelTray.exe` existe antes de publicar.
-- **Versão divergente**: `pyproject.toml`, `AI_CONTEXT.md`, tag e release devem usar a MESMA versão.
+- **Versão divergente**: `pyproject.toml`, `01-project-architecture.md` (na seção "Visão geral"), tag e release devem usar a MESMA versão.
 - **`hiddenimports`**: o spec deve conter `unicodedata` e `yaml` (já presentes).
 - **Template de config no exe**: `datas=[('config/config.local.yaml.example', 'config')]` deve permanecer no spec.
 - **Não rode o build** sem antes validar testes e sincronizar versão.

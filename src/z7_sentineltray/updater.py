@@ -14,6 +14,7 @@ import time
 import tkinter as tk
 import urllib.error
 import urllib.request
+from functools import partial
 from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING, Any
@@ -88,9 +89,9 @@ def check_write_permission(dest_path: Path) -> bool:
         temp_file = parent / f".write_test_{os.getpid()}"
         temp_file.touch()
         temp_file.unlink()
-        return True
     except Exception:
         return False
+    return True
 
 
 def _get_target_path() -> Path:
@@ -98,6 +99,7 @@ def _get_target_path() -> Path:
     is_frozen = getattr(sys, "frozen", False)
     if not is_frozen:
         from .config import get_project_root
+
         return get_project_root() / "dist" / "Z7_SentinelTray.exe"
     return Path(sys.executable)
 
@@ -108,29 +110,29 @@ def _restart_application(exe_path: Path) -> None:
     Uses a layered strategy to maximize success probability regardless of
     admin privileges or system security restrictions (AppLocker, SRP, etc.).
 
-    Strategy 1 – ``subprocess.Popen``: Launches the new executable as a fully
+    Strategy 1 - ``subprocess.Popen``: Launches the new executable as a fully
         independent process (detached from the current console).  Does NOT
         require admin rights.  The current process then exits via
         ``os._exit(0)`` which bypasses Python cleanup and releases file locks
         immediately.
 
-    Strategy 2 – Temporary ``.cmd`` batch script:  If ``Popen`` fails (e.g.
+    Strategy 2 - Temporary ``.cmd`` batch script:  If ``Popen`` fails (e.g.
         blocked by application-control policy), a small ``.cmd`` script is
         written to ``%TEMP%``.  The script waits for the current PID to
         disappear, starts the new executable, and self-deletes.  ``cmd.exe``
         is almost universally permitted even under strict AppLocker rules.
 
-    Strategy 3 – Temporary ``.vbs`` VBScript:  Uses ``wscript.exe`` to run
+    Strategy 3 - Temporary ``.vbs`` VBScript:  Uses ``wscript.exe`` to run
         a VBScript that waits for the current process to exit, then launches
         the new executable.  ``wscript.exe`` is a trusted Windows component
         that is typically allowed even under restrictive security policies
         where ``.cmd`` and ``.ps1`` may be blocked.
 
-    Strategy 4 – ``powershell.exe Start-Process``:  Uses PowerShell with
+    Strategy 4 - ``powershell.exe Start-Process``:  Uses PowerShell with
         ``-ExecutionPolicy Bypass`` to launch the new executable.  PowerShell
         is a standard Windows component available on all modern systems.
 
-    Strategy 5 – ``os.startfile``:  Uses the Windows Shell ``ShellExecute``
+    Strategy 5 - ``os.startfile``:  Uses the Windows Shell ``ShellExecute``
         API which is the most permissive launch mechanism.  This is the
         last-resort fallback.
 
@@ -145,13 +147,16 @@ def _restart_application(exe_path: Path) -> None:
 
     LOGGER.info(
         "Preparing to restart application. exe_path=%s, current_pid=%d",
-        exe_path, current_pid, extra={"category": "update"},
+        exe_path,
+        current_pid,
+        extra={"category": "update"},
     )
 
     if not exe_path.exists():
         LOGGER.error(
             "Cannot restart: target executable does not exist: %s",
-            exe_path, extra={"category": "update"},
+            exe_path,
+            extra={"category": "update"},
         )
         return
 
@@ -176,7 +181,9 @@ def _restart_application(exe_path: Path) -> None:
 
     LOGGER.error(
         "All restart strategies failed. The user must restart the application manually. "
-        "exe_path=%s", exe_path, extra={"category": "update"},
+        "exe_path=%s",
+        exe_path,
+        extra={"category": "update"},
     )
 
 
@@ -184,7 +191,8 @@ def _try_restart_popen(exe_path: Path, current_pid: int) -> None:
     """Strategy 1: Launch via subprocess.Popen and hard-exit."""
     try:
         LOGGER.info(
-            "Restart strategy 1: subprocess.Popen (exe=%s)", exe_path,
+            "Restart strategy 1: subprocess.Popen (exe=%s)",
+            exe_path,
             extra={"category": "update"},
         )
         creation_flags = 0
@@ -202,12 +210,14 @@ def _try_restart_popen(exe_path: Path, current_pid: int) -> None:
         )
         LOGGER.info(
             "Restart strategy 1: Popen succeeded. Exiting current process (pid=%d)...",
-            current_pid, extra={"category": "update"},
+            current_pid,
+            extra={"category": "update"},
         )
-        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+        os._exit(0)  # intentional hard exit after update
     except Exception as exc:
         LOGGER.warning(
-            "Restart strategy 1 (subprocess.Popen) failed: %s", exc,
+            "Restart strategy 1 (subprocess.Popen) failed: %s",
+            exc,
             extra={"category": "update"},
         )
 
@@ -237,7 +247,8 @@ def _try_restart_batch_script(exe_path: Path, current_pid: int) -> None:
             '(goto) 2>nul & del "%~f0"\r\n'
         )
         bat_fd, bat_path_str = tempfile.mkstemp(
-            suffix=".cmd", prefix=_RESTART_SCRIPT_PREFIX,
+            suffix=".cmd",
+            prefix=_RESTART_SCRIPT_PREFIX,
         )
         bat_path = Path(bat_path_str)
         try:
@@ -246,7 +257,8 @@ def _try_restart_batch_script(exe_path: Path, current_pid: int) -> None:
             os.close(bat_fd)
 
         LOGGER.info(
-            "Restart strategy 2: batch script written to %s", bat_path,
+            "Restart strategy 2: batch script written to %s",
+            bat_path,
             extra={"category": "update"},
         )
         creation_flags = 0
@@ -262,12 +274,14 @@ def _try_restart_batch_script(exe_path: Path, current_pid: int) -> None:
         )
         LOGGER.info(
             "Restart strategy 2: batch script launched. Exiting current process (pid=%d)...",
-            current_pid, extra={"category": "update"},
+            current_pid,
+            extra={"category": "update"},
         )
-        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+        os._exit(0)  # intentional hard exit after update
     except Exception as exc:
         LOGGER.warning(
-            "Restart strategy 2 (batch script) failed: %s", exc,
+            "Restart strategy 2 (batch script) failed: %s",
+            exc,
             extra={"category": "update"},
         )
 
@@ -300,7 +314,8 @@ def _try_restart_vbs_script(exe_path: Path, current_pid: int) -> None:
             f'objShell.Run """{_esc}""", 1, False\r\n'
         )
         vbs_fd, vbs_path_str = tempfile.mkstemp(
-            suffix=".vbs", prefix=_RESTART_SCRIPT_PREFIX,
+            suffix=".vbs",
+            prefix=_RESTART_SCRIPT_PREFIX,
         )
         vbs_path = Path(vbs_path_str)
         try:
@@ -309,7 +324,8 @@ def _try_restart_vbs_script(exe_path: Path, current_pid: int) -> None:
             os.close(vbs_fd)
 
         LOGGER.info(
-            "Restart strategy 3: VBScript written to %s", vbs_path,
+            "Restart strategy 3: VBScript written to %s",
+            vbs_path,
             extra={"category": "update"},
         )
         creation_flags = 0
@@ -325,12 +341,14 @@ def _try_restart_vbs_script(exe_path: Path, current_pid: int) -> None:
         )
         LOGGER.info(
             "Restart strategy 3: VBScript launched. Exiting current process (pid=%d)...",
-            current_pid, extra={"category": "update"},
+            current_pid,
+            extra={"category": "update"},
         )
-        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+        os._exit(0)  # intentional hard exit after update
     except Exception as exc:
         LOGGER.warning(
-            "Restart strategy 3 (VBScript) failed: %s", exc,
+            "Restart strategy 3 (VBScript) failed: %s",
+            exc,
             extra={"category": "update"},
         )
 
@@ -344,10 +362,7 @@ def _try_restart_powershell(exe_path: Path) -> None:
             extra={"category": "update"},
         )
         _escaped_path = str(exe_path).replace("'", "''")
-        ps_cmd = (
-            f"Start-Process -FilePath '{_escaped_path}' -WorkingDirectory "
-            f"'{exe_path.parent}'"
-        )
+        ps_cmd = f"Start-Process -FilePath '{_escaped_path}' -WorkingDirectory '{exe_path.parent}'"
         creation_flags = 0
         if sys.platform == "win32":
             creation_flags = 0x00000008 | 0x00000200
@@ -356,9 +371,12 @@ def _try_restart_powershell(exe_path: Path) -> None:
                 "powershell.exe",
                 "-NoProfile",
                 "-NonInteractive",
-                "-ExecutionPolicy", "Bypass",
-                "-WindowStyle", "Hidden",
-                "-Command", ps_cmd,
+                "-ExecutionPolicy",
+                "Bypass",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                ps_cmd,
             ],
             creationflags=creation_flags,
             close_fds=True,
@@ -370,10 +388,11 @@ def _try_restart_powershell(exe_path: Path) -> None:
             "Restart strategy 4: PowerShell succeeded. Exiting current process...",
             extra={"category": "update"},
         )
-        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
+        os._exit(0)  # intentional hard exit after update
     except Exception as exc:
         LOGGER.warning(
-            "Restart strategy 4 (PowerShell) failed: %s", exc,
+            "Restart strategy 4 (PowerShell) failed: %s",
+            exc,
             extra={"category": "update"},
         )
 
@@ -382,18 +401,19 @@ def _try_restart_startfile(exe_path: Path) -> None:
     """Strategy 5: os.startfile (Windows ShellExecute API)."""
     try:
         LOGGER.info(
-            "Restart strategy 5: os.startfile (exe=%s)", exe_path,
+            "Restart strategy 5: os.startfile (exe=%s)",
+            exe_path,
             extra={"category": "update"},
         )
-        os.startfile(str(exe_path))  # type: ignore[attr-defined]
+        os.startfile(str(exe_path))
         LOGGER.info(
             "Restart strategy 5: startfile succeeded. Exiting current process...",
             extra={"category": "update"},
         )
-        os._exit(0)  # noqa: SLF001 – intentional hard exit after update
-    except Exception as exc:
-        LOGGER.error(
-            "Restart strategy 5 (os.startfile) also failed: %s", exc,
+        os._exit(0)  # intentional hard exit after update
+    except Exception:
+        LOGGER.exception(
+            "Restart strategy 5 (os.startfile) also failed",
             extra={"category": "update"},
         )
 
@@ -594,14 +614,15 @@ class UpdateProgressWindow:
                             )
                             last_logged_quarter = current_quarter
 
-                        if current_percent_int != last_percent or (now - last_ui_update_time) >= 0.1:
+                        if (
+                            current_percent_int != last_percent
+                            or (now - last_ui_update_time) >= 0.1
+                        ):
                             speed_msg = (
                                 f"Baixando: {percent:.1f}% "
                                 f"({bytes_downloaded // 1024} KB / {total_size // 1024} KB)"
                             )
-                            self.win.after(
-                                0, lambda p=percent, m=speed_msg: self._update_ui_state(p, m)
-                            )
+                            self.win.after(0, partial(self._update_ui_state, percent, speed_msg))
                             last_percent = current_percent_int
                             last_ui_update_time = now
 
@@ -628,7 +649,7 @@ class UpdateProgressWindow:
             LOGGER.exception("Failed to download update", extra={"category": "update"})
             if temp_dest.exists():
                 temp_dest.unlink(missing_ok=True)
-            self.win.after(0, lambda e=exc: self._handle_error(e))
+            self.win.after(0, partial(self._handle_error, exc))
 
     def _update_ui_state(self, percent: float, msg: str) -> None:
         if self.win.winfo_exists():
@@ -716,7 +737,7 @@ class UpdateProgressWindow:
             )
             try:
                 os.rename(temp_dest, current_exe)
-            except Exception as rename_exc:
+            except Exception:
                 LOGGER.error(
                     "Failed to rename temp download to current exe. Restoring backup...",
                     exc_info=True,
@@ -732,7 +753,7 @@ class UpdateProgressWindow:
                         exc_info=True,
                         extra={"category": "update"},
                     )
-                raise rename_exc
+                raise
 
             messagebox.showinfo(
                 "Atualização Concluída",
@@ -774,7 +795,7 @@ class UpdateProgressWindow:
         self.win.destroy()
 
 
-def run_update_check(
+def run_update_check(  # noqa: C901
     parent: tk.Tk | tk.Toplevel,
     theme_state: _ThemeState,
     current_version: str,
@@ -791,7 +812,7 @@ def run_update_check(
         status: The global thread-safe status store to update.
     """
 
-    def do_check() -> None:
+    def do_check() -> None:  # noqa: C901
         if status:
             status.set_update_status("Verificando...")
         LOGGER.info(
@@ -867,7 +888,8 @@ def run_update_check(
 
             if not exe_asset:
                 LOGGER.warning(
-                    "Compatible executable asset (.exe or 'Z7_SentinelTray') not found in release %s assets.",
+                    "Compatible executable asset (.exe or 'Z7_SentinelTray') "
+                    "not found in release %s assets.",
                     tag_name,
                     extra={"category": "update"},
                 )
@@ -894,7 +916,8 @@ def run_update_check(
 
             if parse_version(tag_name) <= parse_version(current_version):
                 LOGGER.info(
-                    "Current version %s is up-to-date or newer than latest version %s. Skipping update.",
+                    "Current version %s is up-to-date or newer than latest "
+                    "version %s. Skipping update.",
                     current_version,
                     tag_name,
                     extra={"category": "update"},
@@ -934,8 +957,9 @@ def run_update_check(
                         0,
                         lambda: messagebox.showwarning(
                             "Permissão Negada",
-                            f"Uma nova versão ({tag_name}) está disponível, mas o aplicativo não possui "
-                            f"permissão de gravação no diretório de instalação:\n{dest_path.parent}\n\n"
+                            f"Uma nova versão ({tag_name}) está disponível, "
+                            f"mas o aplicativo não possui permissão de gravação "
+                            f"no diretório de instalação:\n{dest_path.parent}\n\n"
                             f"Por favor, execute o aplicativo como administrador para atualizar.",
                             parent=parent,
                         ),
@@ -978,13 +1002,13 @@ def run_update_check(
 
         except Exception as exc:
             # Check if this is a common network error to avoid tracebacks in logs when offline.
-            is_network_err = False
-            if isinstance(exc, urllib.error.URLError):
-                is_network_err = True
-            elif isinstance(exc, (TimeoutError, ConnectionError)):
-                is_network_err = True
-            elif hasattr(exc, "reason") and ("getaddrinfo failed" in str(exc) or "timed out" in str(exc)):
-                is_network_err = True
+            reason_text = str(exc)
+            is_network_err = isinstance(
+                exc, (urllib.error.URLError, TimeoutError, ConnectionError)
+            ) or (
+                hasattr(exc, "reason")
+                and ("getaddrinfo failed" in reason_text or "timed out" in reason_text)
+            )
 
             if is_network_err:
                 LOGGER.warning(
@@ -993,16 +1017,21 @@ def run_update_check(
                     extra={"category": "update"},
                 )
             else:
-                LOGGER.exception("Failed to check for updates due to unexpected error", extra={"category": "update"})
+                LOGGER.exception(
+                    "Failed to check for updates due to unexpected error",
+                    extra={"category": "update"},
+                )
 
             if status:
                 status.set_update_status("Erro ao verificar")
             if not on_startup:
+                error_text = f"Erro ao verificar atualizações:\n{exc}"
                 parent.after(
                     0,
-                    lambda e=exc: messagebox.showerror(
+                    partial(
+                        messagebox.showerror,
                         "Erro de Verificação",
-                        f"Erro ao verificar atualizações:\n{e}",
+                        error_text,
                         parent=parent,
                     ),
                 )

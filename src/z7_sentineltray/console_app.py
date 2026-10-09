@@ -21,7 +21,6 @@ from .app import Notifier
 from .config import (
     AppConfig,
     get_config_template_path,
-    get_project_root,
     get_user_data_dir,
     get_user_log_dir,
     load_config,
@@ -127,14 +126,14 @@ def _create_config_editor() -> tuple[  # noqa: C901
     def finalize_config_edit() -> AppConfig | None:
         nonlocal edit_process
         if edit_process is None:
-            return
+            return None
         if edit_process.poll() is None:
-            return
+            return None
         edit_process = None
         try:
             target_path = config_path()
             if not target_path.exists():
-                return
+                return None
             try:
                 new_config = load_config(str(target_path))
             except Exception as exc:
@@ -149,7 +148,7 @@ def _create_config_editor() -> tuple[  # noqa: C901
     def close_editor() -> None:
         nonlocal edit_process
         if edit_process is None:
-            return
+            return None
         if edit_process.poll() is None:
             try:
                 edit_process.terminate()
@@ -364,7 +363,6 @@ def _update_smtp_credentials_console(config: AppConfig) -> None:
             try:
                 yaml_text = local_path.read_text(encoding="utf-8")
                 # Patch this single monitor's username
-                monitors_count = len(config.monitors)
                 all_usernames = [
                     new_username if i == index - 1 else str(m.email.smtp_username or "")
                     for i, m in enumerate(config.monitors)

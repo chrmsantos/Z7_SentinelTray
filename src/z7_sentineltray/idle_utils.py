@@ -1,9 +1,8 @@
-"""Win32 idle-time helpers for detecting user inactivity."""
+"""Win32 helpers for user inactivity detection and workstation locking."""
 
 from __future__ import annotations
 
 import sys
-
 
 _last_known_real_input_tick: int | None = None
 _last_seen_input_tick: int | None = None
@@ -20,7 +19,7 @@ def _get_raw_last_input_tick() -> int | None:
 
     lii = _LASTINPUTINFO()
     lii.cbSize = ctypes.sizeof(_LASTINPUTINFO)
-    if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):  # type: ignore[attr-defined]
+    if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
         return int(lii.dwTime)
     return None
 
@@ -56,7 +55,10 @@ def end_scan() -> None:
     raw = _get_raw_last_input_tick()
     if raw is not None:
         global _last_seen_input_tick, _last_seen_input_tick_before_scan
-        if _last_seen_input_tick_before_scan is not None and raw != _last_seen_input_tick_before_scan:
+        if (
+            _last_seen_input_tick_before_scan is not None
+            and raw != _last_seen_input_tick_before_scan
+        ):
             # Last input tick changed during the scan. This is simulated input, ignore it
             # for active monitoring threshold purposes but record it as seen.
             _last_seen_input_tick = raw
@@ -84,12 +86,12 @@ def get_idle_seconds() -> float:
         _last_seen_input_tick = raw
 
     import ctypes
-    tick_count: int = ctypes.windll.kernel32.GetTickCount()  # type: ignore[attr-defined]
+
+    tick_count: int = ctypes.windll.kernel32.GetTickCount()
     if _last_known_real_input_tick is not None:
         idle_ms = (tick_count - _last_known_real_input_tick) & 0xFFFFFFFF
         return idle_ms / 1000.0
     return float("inf")
-
 
 
 def is_screen_locked() -> bool:
@@ -98,13 +100,31 @@ def is_screen_locked() -> bool:
         return False
 
     import ctypes
+
     user32 = ctypes.windll.user32
     h_desktop = user32.OpenDesktopW("default", 0, False, 0x0100)
     if h_desktop == 0:
         return True
     try:
         result = user32.SwitchDesktop(h_desktop)
-        return result == 0
+        return bool(result == 0)
     finally:
         user32.CloseDesktop(h_desktop)
 
+
+def lock_workstation() -> bool:
+    """Lock the Windows workstation (equivalent to Win+L).
+
+    Returns True when the lock request succeeded. Returns False on
+    non-Windows platforms or when the Win32 call fails; this helper
+    never raises.
+    """
+    if sys.platform != "win32":
+        return False
+
+    import ctypes
+
+    try:
+        return bool(ctypes.windll.user32.LockWorkStation())
+    except Exception:
+        return False

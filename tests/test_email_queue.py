@@ -97,4 +97,3 @@ def test_queueing_sender_cumulative_and_get_stats(tmp_path):
     assert stats.queued == 0
     assert stats.sent == 2
     assert stats.failed == 1
-

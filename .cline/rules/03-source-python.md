@@ -11,7 +11,7 @@ Regras ativadas quando se trabalha com código em `src/z7_sentineltray/`.
 ## Estrutura de módulos
 
 - Cada módulo trata de uma responsabilidade única (ver `01-project-architecture.md`).
-- Novos módulos devem ser registrados em `AI_CONTEXT.md` com descrição.
+- Novos módulos devem ser registrados em `01-project-architecture.md` com descrição.
 - Nenhum módulo deve exceder ~500 linhas sem justificativa.
 
 ## Dataclasses

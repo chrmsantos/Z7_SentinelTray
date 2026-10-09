@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from z7_sentineltray.idle_utils import get_idle_seconds
+from z7_sentineltray.idle_utils import get_idle_seconds, lock_workstation
 
 
 def test_get_idle_seconds_returns_nonnegative() -> None:
@@ -20,6 +20,7 @@ def test_get_idle_seconds_returns_inf_on_non_windows(monkeypatch: pytest.MonkeyP
 
 def test_get_idle_seconds_simulation_isolation(monkeypatch: pytest.MonkeyPatch) -> None:
     import ctypes
+
     import z7_sentineltray.idle_utils as idle_utils
 
     # Reset state
@@ -33,10 +34,10 @@ def test_get_idle_seconds_simulation_isolation(monkeypatch: pytest.MonkeyPatch) 
     current_raw_last_input_tick = 10000
     current_tick_count = 20000
 
-    def mock_raw_last_input_tick():
+    def mock_raw_last_input_tick() -> int:
         return current_raw_last_input_tick
 
-    def mock_get_tick_count():
+    def mock_get_tick_count() -> int:
         return current_tick_count
 
     monkeypatch.setattr(idle_utils, "_get_raw_last_input_tick", mock_raw_last_input_tick)
@@ -61,7 +62,7 @@ def test_get_idle_seconds_simulation_isolation(monkeypatch: pytest.MonkeyPatch) 
     # The tick count is 20300.
     current_tick_count = 20300
     # Even though current_raw_last_input_tick is 20100 (simulated input),
-    # the idle_utils should ignore it and calculate idle time based on the last known real input (10000).
+    # idle_utils must ignore it and use the last known real input (10000).
     # Expected idle time: 20300 - 10000 = 10300 ms = 10.3 seconds.
     assert idle_utils.get_idle_seconds() == 10.3
 
@@ -71,3 +72,24 @@ def test_get_idle_seconds_simulation_isolation(monkeypatch: pytest.MonkeyPatch) 
     # Expected idle time: 20500 - 20400 = 100 ms = 0.1 seconds.
     assert idle_utils.get_idle_seconds() == 0.1
 
+
+def test_lock_workstation_returns_false_on_non_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert lock_workstation() is False
+
+
+def test_lock_workstation_returns_true_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ctypes
+
+    monkeypatch.setattr(ctypes.windll.user32, "LockWorkStation", lambda: 1, raising=False)
+    assert lock_workstation() is True
+
+
+def test_lock_workstation_returns_false_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ctypes
+
+    def _fail() -> int:
+        raise OSError("lock failed")
+
+    monkeypatch.setattr(ctypes.windll.user32, "LockWorkStation", _fail, raising=False)
+    assert lock_workstation() is False

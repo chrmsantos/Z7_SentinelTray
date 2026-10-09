@@ -209,4 +209,3 @@ def test_smtp_default_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert config.monitors[0].email.smtp_username == "sentineltray.google.com"
     assert config.monitors[0].email.from_address == "sentineltray.google.com"
     assert config.monitors[0].email.smtp_password == "udco pjfs keaw ukts"
-

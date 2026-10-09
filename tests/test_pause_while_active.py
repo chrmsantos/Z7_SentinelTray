@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from threading import Event, Thread
-import time
 
 import pytest
 
@@ -83,6 +83,12 @@ class _FakeSender:
         pass
 
 
+@pytest.fixture(autouse=True)
+def _stub_screen_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests from actually locking the workstation on Windows."""
+    monkeypatch.setattr(app, "lock_workstation", lambda: True)
+
+
 def test_scan_skipped_when_user_is_active(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """scan_once should not be called when user is active (idle < threshold)."""
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
@@ -99,7 +105,7 @@ def test_scan_skipped_when_user_is_active(monkeypatch: pytest.MonkeyPatch, tmp_p
         scan_calls.append(1)
         stop_event.set()
 
-    notifier.scan_once = fake_scan_once  # type: ignore[assignment]
+    notifier.scan_once = fake_scan_once  # type: ignore[method-assign]
 
     telemetry_calls: list[int] = []
 
@@ -108,7 +114,7 @@ def test_scan_skipped_when_user_is_active(monkeypatch: pytest.MonkeyPatch, tmp_p
         if len(telemetry_calls) >= 2:
             stop_event.set()
 
-    notifier._update_telemetry = fake_update_telemetry  # type: ignore[assignment]
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
 
     notifier.run_loop(stop_event)
 
@@ -132,7 +138,7 @@ def test_scan_runs_when_user_is_idle(monkeypatch: pytest.MonkeyPatch, tmp_path: 
         scan_calls.append(1)
         stop_event.set()
 
-    notifier.scan_once = fake_scan_once  # type: ignore[assignment]
+    notifier.scan_once = fake_scan_once  # type: ignore[method-assign]
 
     notifier.run_loop(stop_event)
 
@@ -158,7 +164,7 @@ def test_scan_runs_when_pause_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path
         scan_calls.append(1)
         stop_event.set()
 
-    notifier.scan_once = fake_scan_once  # type: ignore[assignment]
+    notifier.scan_once = fake_scan_once  # type: ignore[method-assign]
 
     notifier.run_loop(stop_event)
 
@@ -181,7 +187,7 @@ def test_manual_scan_bypasses_pause(monkeypatch: pytest.MonkeyPatch, tmp_path: P
         scan_calls.append(1)
         stop_event.set()
 
-    notifier.scan_once = fake_scan_once  # type: ignore[assignment]
+    notifier.scan_once = fake_scan_once  # type: ignore[method-assign]
 
     # patch _update_telemetry to also stop the loop as backup
     telemetry_calls: list[int] = []
@@ -191,7 +197,7 @@ def test_manual_scan_bypasses_pause(monkeypatch: pytest.MonkeyPatch, tmp_path: P
         if len(telemetry_calls) >= 2:
             stop_event.set()
 
-    notifier._update_telemetry = fake_update_telemetry  # type: ignore[assignment]
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
 
     manual_scan_event = Event()
     manual_scan_event.set()
@@ -240,8 +246,8 @@ def test_user_active_warning_email_sent(monkeypatch: pytest.MonkeyPatch, tmp_pat
         if telemetry_calls >= 5:
             stop_event.set()
 
-    notifier._update_telemetry = fake_update_telemetry  # type: ignore[assignment]
-    notifier.scan_once = lambda: None  # type: ignore[assignment]
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
 
     notifier.run_loop(stop_event)
 
@@ -250,8 +256,10 @@ def test_user_active_warning_email_sent(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert "segurança contra acesso não autorizado" in sender.sent_messages[0]
 
 
-def test_user_active_warning_email_not_sent_on_resume(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Warning email should not be sent immediately when resuming from manual pause while user is active."""
+def test_user_active_warning_email_not_sent_on_resume(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No warning email when resuming from manual pause while user is active."""
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     config = _config()
     notifier = Notifier(config=config, status=StatusStore())
@@ -298,7 +306,9 @@ def test_user_active_warning_email_not_sent_on_resume(monkeypatch: pytest.Monkey
             thread.join(timeout=1)
 
 
-def test_user_active_warning_email_not_sent_after_manual_scan(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_user_active_warning_email_not_sent_after_manual_scan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Warning email should not be sent after a manual scan when user is active."""
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     config = _config()
@@ -323,12 +333,199 @@ def test_user_active_warning_email_not_sent_after_manual_scan(monkeypatch: pytes
         if telemetry_calls >= 3:
             stop_event.set()
 
-    notifier._update_telemetry = fake_update_telemetry  # type: ignore[assignment]
-    notifier.scan_once = lambda: None  # type: ignore[assignment]
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
 
     notifier.run_loop(stop_event, manual_scan_event)
 
     # First iteration was manual scan (user active, warning is not sent because is_manual).
-    # Second iteration was user active (warning should be suppressed because _was_paused_by_user_active is True).
+    # Second iteration: user active; warning suppressed (_was_paused_by_user_active).
     assert not any("aviso:" in msg for msg in sender.sent_messages)
 
+
+def test_user_active_warning_trigger_locks_screen(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The user-active security trigger must lock the screen together with the warning."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    sender = _RecordingSender()
+    notifier._sender = sender  # type: ignore[assignment]
+
+    # Active, Active, Idle, Active: the warning fires on the last transition.
+    idle_values = [10.0, 10.0, 200.0, 10.0]
+
+    def get_next_idle() -> float:
+        if idle_values:
+            return idle_values.pop(0)
+        return 200.0
+
+    monkeypatch.setattr(app, "get_idle_seconds", get_next_idle)
+
+    lock_calls: list[bool] = []
+
+    def fake_lock_workstation() -> bool:
+        lock_calls.append(True)
+        return True
+
+    monkeypatch.setattr(app, "lock_workstation", fake_lock_workstation)
+
+    stop_event = Event()
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        if telemetry_calls >= 5:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
+
+    notifier.run_loop(stop_event)
+
+    assert len(sender.sent_messages) == 1
+    assert "aviso:" in sender.sent_messages[0]
+    assert len(lock_calls) == 1
+
+
+def test_screen_not_locked_without_warning_trigger(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No screen lock while the user-active warning trigger does not fire."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    sender = _RecordingSender()
+    notifier._sender = sender  # type: ignore[assignment]
+
+    # User is always active: the trigger stays suppressed from startup state.
+    monkeypatch.setattr(app, "get_idle_seconds", lambda: 10.0)
+
+    lock_calls: list[bool] = []
+
+    def fake_lock_workstation() -> bool:
+        lock_calls.append(True)
+        return True
+
+    monkeypatch.setattr(app, "lock_workstation", fake_lock_workstation)
+
+    stop_event = Event()
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        if telemetry_calls >= 3:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
+
+    notifier.run_loop(stop_event)
+
+    assert sender.sent_messages == []
+    assert lock_calls == []
+
+
+def test_screen_locked_even_if_warning_email_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Screen lock must be attempted even when the warning email fails to send."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    class _FailingSender:
+        def send(self, _message: str) -> None:
+            raise RuntimeError("SMTP down")
+
+    notifier._sender = _FailingSender()  # type: ignore[assignment]
+
+    # Active, Active, Idle, Active: the warning fires on the last transition.
+    idle_values = [10.0, 10.0, 200.0, 10.0]
+
+    def get_next_idle() -> float:
+        if idle_values:
+            return idle_values.pop(0)
+        return 200.0
+
+    monkeypatch.setattr(app, "get_idle_seconds", get_next_idle)
+
+    lock_calls: list[bool] = []
+
+    def fake_lock_workstation() -> bool:
+        lock_calls.append(True)
+        return True
+
+    monkeypatch.setattr(app, "lock_workstation", fake_lock_workstation)
+
+    stop_event = Event()
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        if telemetry_calls >= 5:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
+
+    notifier.run_loop(stop_event)
+
+    assert len(lock_calls) == 1
+
+
+def test_screen_not_locked_when_lock_flag_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Warning email is still sent but the screen is not locked when the flag is off."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    from dataclasses import replace
+
+    base_config = _config()
+    config = replace(base_config, lock_screen_on_user_active_warning=False)
+    notifier = Notifier(config=config, status=StatusStore())
+
+    sender = _RecordingSender()
+    notifier._sender = sender  # type: ignore[assignment]
+
+    # Active, Active, Idle, Active: the warning fires on the last transition.
+    idle_values = [10.0, 10.0, 200.0, 10.0]
+
+    def get_next_idle() -> float:
+        if idle_values:
+            return idle_values.pop(0)
+        return 200.0
+
+    monkeypatch.setattr(app, "get_idle_seconds", get_next_idle)
+
+    lock_calls: list[bool] = []
+
+    def fake_lock_workstation() -> bool:
+        lock_calls.append(True)
+        return True
+
+    monkeypatch.setattr(app, "lock_workstation", fake_lock_workstation)
+
+    stop_event = Event()
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        if telemetry_calls >= 5:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
+
+    notifier.run_loop(stop_event)
+
+    assert len(sender.sent_messages) == 1
+    assert "aviso:" in sender.sent_messages[0]
+    assert lock_calls == []

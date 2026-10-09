@@ -11,6 +11,7 @@ import re
 import shutil
 import socket
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,7 +29,7 @@ from .email_sender import (
     QueueingEmailSender,
     build_sender,
 )
-from .idle_utils import end_scan, get_idle_seconds, is_screen_locked, start_scan
+from .idle_utils import end_scan, get_idle_seconds, is_screen_locked, lock_workstation, start_scan
 from .io_utils import read_json_safe
 from .logging_setup import log_context, sanitize_text, scan_context, setup_logging
 from .scan_utils import dedupe_items, filter_debounce, filter_min_repeat
@@ -196,11 +197,11 @@ def _get_commit_hash() -> str:
                 if line.startswith("#"):
                     continue
                 parts = line.split()
-                if len(parts) == 2 and parts[1] == ref_name:  # noqa: PLR2004
+                if len(parts) == 2 and parts[1] == ref_name:
                     return parts[0]
-        return ""
     except Exception:
         return ""
+    return ""
 
 
 def _check_smtp_health(config: AppConfig) -> None:
@@ -427,7 +428,7 @@ class Notifier:
         base = max(1, self.config.window_error_backoff_base_seconds)
         maximum = max(base, self.config.window_error_backoff_max_seconds)
         backoff = base * (2 ** (failure_count - 1))
-        return min(maximum, backoff)
+        return int(min(maximum, backoff))
 
     def _should_notify_error(self, last_notification_at: float) -> bool:
         cooldown = max(0, self.config.error_notification_cooldown_seconds)
@@ -450,7 +451,8 @@ class Notifier:
                 monitor.last_error_notification_at = time.monotonic()
                 self.status.set_last_send(_now_iso())
 
-        # Circuit breaker e backoff do monitor desativados para que erros não prejudiquem a continuidade da tentativa de funcionamento
+        # Circuit breaker e backoff do monitor desativados para que erros
+        # não prejudiquem a continuidade da tentativa de funcionamento
         monitor.breaker_until = 0.0
         self.status.set_monitor_state(
             monitor.key,
@@ -471,14 +473,21 @@ class Notifier:
     def _scan_once_impl(self) -> None:  # noqa: C901
         self.status.set_last_scan(_now_iso())
         import sys
+
         if sys.platform == "win32":
             try:
                 import ctypes
+
                 user32 = ctypes.windll.user32
                 active_titles = []
 
-                @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-                def enum_proc(hwnd, lParam):
+                _enum_proc_type = cast(
+                    "Callable[[Callable[[int, int], bool]], Callable[[int, int], bool]]",
+                    ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p),
+                )
+
+                @_enum_proc_type
+                def enum_proc(hwnd: int, lparam: int) -> bool:
                     if user32.IsWindowVisible(hwnd):
                         length = user32.GetWindowTextLengthW(hwnd)
                         if length > 0:
@@ -768,6 +777,30 @@ class Notifier:
             error_message = f"erro: falha ao enviar teste de inicialização: {exc}"
             self._handle_error(error_message)
 
+    def _lock_screen_for_security(self) -> None:
+        """Lock the user session as part of the user-active security trigger.
+
+        Called by the same trigger that sends the security warning email.
+        Honors ``lock_screen_on_user_active_warning``. The lock attempt is
+        unconditional and never raises; failures are logged as errors.
+        """
+        if not self.config.lock_screen_on_user_active_warning:
+            LOGGER.debug(
+                "Screen lock disabled by config lock_screen_on_user_active_warning",
+                extra={"category": "scan"},
+            )
+            return
+        if lock_workstation():
+            LOGGER.info(
+                "Screen locked after user-active security trigger",
+                extra={"category": "scan"},
+            )
+        else:
+            LOGGER.warning(
+                "Failed to lock workstation after user-active security trigger",
+                extra={"category": "error"},
+            )
+
     def _send_user_active_warning(self) -> None:
         """Send a warning email when monitoring is put on hold due to user activity."""
         message = (
@@ -838,7 +871,7 @@ class Notifier:
         base = max(1, self.config.error_backoff_base_seconds)
         maximum = max(base, self.config.error_backoff_max_seconds)
         backoff = base * (2 ** (error_count - 1))
-        return min(maximum, backoff)
+        return int(min(maximum, backoff))
 
     def _update_telemetry(self) -> None:
         snapshot = self.status.snapshot()
@@ -976,6 +1009,7 @@ class Notifier:
             manual_scan_event: Optional event to trigger an immediate scan.
             scan_complete_event: Optional event set after each scan completes.
             test_message_event: Optional event to trigger a test email send.
+            pause_event: Optional event that pauses the monitoring loop while set.
         """
         self._commit_hash_ready.wait(timeout=2.0)
         setup_logging(
@@ -1038,7 +1072,7 @@ class Notifier:
                 loop_started = time.perf_counter()
                 try:
                     is_manual = manual_scan_event is not None and manual_scan_event.is_set()
-                    if is_manual:
+                    if is_manual and manual_scan_event is not None:
                         manual_scan_event.clear()
                         LOGGER.info("Manual scan requested", extra={"category": "control"})
                         self._was_paused_by_user_active = True
@@ -1077,6 +1111,7 @@ class Notifier:
                         )
                         if not self._was_paused_by_user_active:
                             self._was_paused_by_user_active = True
+                            self._lock_screen_for_security()
                             self._send_user_active_warning()
                     else:
                         if not is_manual:
@@ -1126,7 +1161,8 @@ class Notifier:
                 if scan_complete_event is not None:
                     scan_complete_event.set()
 
-                # O backoff foi desativado para que erros não prejudiquem a continuidade da tentativa de funcionamento
+                # O backoff foi desativado para que erros
+                # não prejudiquem a continuidade da tentativa de funcionamento
                 wait_seconds = self.config.poll_interval_seconds
                 if _wait_for_next_scan(wait_seconds):
                     continue

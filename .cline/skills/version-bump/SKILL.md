@@ -2,7 +2,7 @@
 name: version-bump
 description: >
   Bump the project version consistently across all files (pyproject.toml,
-  AI_CONTEXT.md) following semantic versioning. Use when the user asks to
+  .cline/rules/01-project-architecture.md) following semantic versioning. Use when the user asks to
   bump version, update version, increment version, or prepare a new release version.
 ---
 
@@ -16,7 +16,7 @@ Atualização consistente de versão em todos os arquivos do projeto.
 
 ```powershell
 Select-String -Path pyproject.toml -Pattern 'version\s*='
-Select-String -Path AI_CONTEXT.md -Pattern 'Versão atual'
+Select-String -Path .cline/rules/01-project-architecture.md -Pattern 'Versão atual'
 ```
 
 ---
@@ -41,7 +41,7 @@ Altere a linha:
 version = "X.Y.Z"
 ```
 
-### AI_CONTEXT.md
+### .cline/rules/01-project-architecture.md
 
 Altere a linha:
 ```markdown
@@ -54,11 +54,11 @@ Altere a linha:
 
 ```powershell
 $pyprojectVersion = (Select-String -Path pyproject.toml -Pattern 'version\s*=\s*"(.+)"').Matches.Groups[1].Value
-$aiContextVersion = (Select-String -Path AI_CONTEXT.md -Pattern '(?<=Versão atual:\*\* )[\d.]+').Matches.Value
+$aiContextVersion = (Select-String -Path .cline/rules/01-project-architecture.md -Pattern '(?<=Versão atual:\*\* )[\d.]+').Matches.Value
 if ($pyprojectVersion -eq $aiContextVersion) {
     Write-Host "OK: Versão $pyprojectVersion consistente"
 } else {
-    Write-Error "ERRO: pyproject.toml=$pyprojectVersion, AI_CONTEXT.md=$aiContextVersion"
+    Write-Error "ERRO: pyproject.toml=$pyprojectVersion, 01-project-architecture.md=$aiContextVersion"
 }
 ```
 

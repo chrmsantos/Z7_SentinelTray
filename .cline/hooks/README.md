@@ -9,7 +9,7 @@ Estágios disponíveis:
 
 | Estágio | Quando dispara | Uso neste projeto |
 |---|---|---|
-| `before_agent_start` | Antes do agente iniciar | Injetar contexto do AI_CONTEXT.md |
+| `before_agent_start` | Antes do agente iniciar | Injetar contexto das regras (.cline/rules/) |
 | `run_start` | Início de cada run | Timer de build, logging |
 | `tool_call_before` | Antes de executar ferramenta | Bloquear comandos destrutivos |
 | `tool_call_after` | Após executar ferramenta | Verificar artefatos de build |

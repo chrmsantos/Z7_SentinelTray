@@ -22,9 +22,9 @@ esses skills primeiro.
 Antes de buildar, confirme:
 
 ```powershell
-# Versão sincronizada entre pyproject.toml e AI_CONTEXT.md?
+# Versão sincronizada entre pyproject.toml e .cline/rules/01-project-architecture.md?
 Select-String -Path pyproject.toml -Pattern 'version\s*=' | Select-Object -First 1
-Select-String -Path AI_CONTEXT.md -Pattern 'Versão atual'
+Select-String -Path .cline/rules/01-project-architecture.md -Pattern 'Versão atual'
 ```
 
 Se divergirem, execute o skill `version-bump` primeiro.
@@ -78,7 +78,7 @@ Pontos de falha comuns:
 ## Passo 3 — Commit e push da versão
 
 ```cmd
-git add pyproject.toml AI_CONTEXT.md
+git add pyproject.toml .cline/rules/01-project-architecture.md
 git commit -m "release: version X.Y.Z"
 git push
 ```

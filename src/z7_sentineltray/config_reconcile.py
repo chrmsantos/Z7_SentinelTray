@@ -15,7 +15,7 @@ import yaml
 from .config import get_project_root
 
 try:
-    from ruamel.yaml import YAML  # type: ignore
+    from ruamel.yaml import YAML
 except Exception:  # pragma: no cover - optional dependency
     YAML = None
 
@@ -106,10 +106,12 @@ def apply_template_to_config_text(legacy_text: str, template_text: str | None) -
         template_data = _load_yaml_mapping(template_text)
         legacy_data = _load_yaml_mapping(legacy_text)
         merged = _merge_dicts(template_data, legacy_data)
-        return yaml.safe_dump(merged, sort_keys=False, allow_unicode=True)
+        dumped: str = yaml.safe_dump(merged, sort_keys=False, allow_unicode=True)
     except Exception as exc:
         LOGGER.warning("Failed to merge config template: %s", exc)
         return legacy_text
+    else:
+        return dumped
 
 
 def hash_text(text: str) -> str:

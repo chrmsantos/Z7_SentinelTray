@@ -54,7 +54,9 @@ def test_save_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert data == {"dark_theme": True}
 
 
-def test_load_restores_dark_theme_from_save(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_restores_dark_theme_from_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A new session should restore the previously saved dark theme."""
     monkeypatch.setenv("Z7_SENTINELTRAY_DATA_DIR", str(tmp_path))
 

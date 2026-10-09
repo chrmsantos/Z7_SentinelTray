@@ -39,6 +39,7 @@ _DEFAULT_CONFIG_VALUES: dict[str, Any] = {
     "config_version": CURRENT_CONFIG_VERSION,
     "pause_on_user_active": True,
     "pause_idle_threshold_seconds": 180,
+    "lock_screen_on_user_active_warning": True,
     "healthcheck_send_on_error_only": True,
 }
 
@@ -181,6 +182,7 @@ class AppConfig:
     email_queue_retry_base_seconds: int = 30
     pause_on_user_active: bool = True
     pause_idle_threshold_seconds: int = 180
+    lock_screen_on_user_active_warning: bool = True
     healthcheck_send_on_error_only: bool = True
     monitors: list[MonitorConfig] = field(default_factory=lambda: cast(list[MonitorConfig], []))
     config_version: int = 1
@@ -363,6 +365,8 @@ def _build_config(data: dict[str, Any]) -> AppConfig:  # noqa: C901
         defaults_applied.append("pause_on_user_active")
     if "pause_idle_threshold_seconds" not in data:
         defaults_applied.append("pause_idle_threshold_seconds")
+    if "lock_screen_on_user_active_warning" not in data:
+        defaults_applied.append("lock_screen_on_user_active_warning")
 
     config = AppConfig(
         poll_interval_seconds=int(_get_required(data, "poll_interval_seconds")),
@@ -398,6 +402,9 @@ def _build_config(data: dict[str, Any]) -> AppConfig:  # noqa: C901
         email_queue_retry_base_seconds=int(data.get("email_queue_retry_base_seconds", 30)),
         pause_on_user_active=bool(data.get("pause_on_user_active", True)),
         pause_idle_threshold_seconds=int(data.get("pause_idle_threshold_seconds", 180)),
+        lock_screen_on_user_active_warning=bool(
+            data.get("lock_screen_on_user_active_warning", True)
+        ),
         healthcheck_send_on_error_only=bool(data.get("healthcheck_send_on_error_only", True)),
         monitors=monitors,
         config_version=int(data.get("config_version", 1)),
@@ -535,6 +542,7 @@ def get_config_template_path() -> Path:
     to the project root under development mode.
     """
     import sys
+
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         path = Path(meipass) / "config" / "config.local.yaml.example"

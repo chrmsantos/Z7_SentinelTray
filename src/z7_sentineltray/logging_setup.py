@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path, PureWindowsPath
+from types import TracebackType
 from uuid import uuid4
 
 MAX_LOG_FILES = 3
@@ -105,7 +106,7 @@ class ContextFilter(logging.Filter):
         if not hasattr(record, "log_context"):
             record.log_context = _LOG_CONTEXT.get({})
         if not hasattr(record, "log_context_text"):
-            record.log_context_text = _format_log_context(record.log_context)
+            record.log_context_text = _format_log_context(getattr(record, "log_context", {}))
         if not hasattr(record, "hostname"):
             record.hostname = self._hostname
         if not hasattr(record, "platform"):
@@ -195,10 +196,15 @@ class DedupFilter(logging.Filter):
         return True
 
 
+_ExcInfoT = (
+    tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None]
+)
+
+
 class SanitizingFormatter(logging.Formatter):
     """Formatter that redacts PII from formatted exception tracebacks."""
 
-    def formatException(self, ei: object) -> str:  # noqa: N802
+    def formatException(self, ei: _ExcInfoT) -> str:  # noqa: N802
         """Format and redact a traceback from *ei*."""
         return sanitize_text(super().formatException(ei))
 
@@ -249,7 +255,7 @@ def _install_exception_hooks() -> None:
     def handle_exception(
         exc_type: type[BaseException],
         exc: BaseException,
-        tb: object,
+        tb: TracebackType | None,
     ) -> None:
         if exc_type in (KeyboardInterrupt, SystemExit):
             logger.info(
@@ -274,9 +280,14 @@ def _install_exception_hooks() -> None:
                     extra={"category": "shutdown"},
                 )
                 return
+            thread_exc: _ExcInfoT
+            if args.exc_type is not None and args.exc_value is not None:
+                thread_exc = (args.exc_type, args.exc_value, args.exc_traceback)
+            else:
+                thread_exc = (None, None, None)
             logger.critical(
                 "Unhandled thread exception",
-                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+                exc_info=thread_exc,
                 extra={"category": "fatal"},
             )
 

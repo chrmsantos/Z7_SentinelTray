@@ -121,4 +121,3 @@ def test_send_healthcheck_sends_when_error_present_and_error_only_mode() -> None
     assert len(sent) == 1, "email should be sent when there is an active error"
     assert "status:" in sent[0].lower()
     assert snapshot.last_healthcheck
-

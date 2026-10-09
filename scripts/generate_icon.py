@@ -3,6 +3,7 @@
 Run from the repository root:
     python scripts/generate_icon.py
 """
+
 from __future__ import annotations
 
 import math
@@ -10,9 +11,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
-
 # -- Palette ------------------------------------------------------------------
-_BG_DARK = (11, 17, 27, 255)   # deep navy background
+_BG_DARK = (11, 17, 27, 255)  # deep navy background
 
 
 def _draw_iris_fibers(
@@ -37,7 +37,7 @@ def _draw_iris_fibers(
 
 def _make_icon(size: int) -> Image.Image:
     """Render a green eye icon on a transparent background at *size* x *size*."""
-    scale = 12                      # 12× supersampling for smooth anti-aliased edges
+    scale = 12  # 12x supersampling for smooth anti-aliased edges
     s = size * scale
     cx, cy = s // 2, s // 2
 
@@ -46,7 +46,7 @@ def _make_icon(size: int) -> Image.Image:
 
     # 2. Two-layer glow: wide cool haze + tight warm core
     for glow_color, radius_base, step, alpha_base, blur_factor in (
-        ((40, 160, 60), 0.28, 0.022, 3, 0.08),   # wide cool haze
+        ((40, 160, 60), 0.28, 0.022, 3, 0.08),  # wide cool haze
         ((80, 220, 100), 0.16, 0.016, 6, 0.04),  # tight warm core
     ):
         glow_layer = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -58,9 +58,7 @@ def _make_icon(size: int) -> Image.Image:
                 [cx - gr, cy - gr, cx + gr, cy + gr],
                 fill=(*glow_color, alpha),
             )
-        glow_layer = glow_layer.filter(
-            ImageFilter.GaussianBlur(radius=int(s * blur_factor))
-        )
+        glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=int(s * blur_factor)))
         img = Image.alpha_composite(img, glow_layer)
 
     # 3. Eye shape
@@ -68,7 +66,7 @@ def _make_icon(size: int) -> Image.Image:
     eh = int(s * 0.48)
     ex0, ey0 = cx - ew // 2, cy - eh // 2
     ex1, ey1 = ex0 + ew, ey0 + eh
-    ea, eb = ew // 2, eh // 2          # semi-axes for parametric lash placement
+    ea, eb = ew // 2, eh // 2  # semi-axes for parametric lash placement
 
     # Drop shadow beneath eye
     shadow = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -147,17 +145,17 @@ def _make_icon(size: int) -> Image.Image:
 
     # Eyelid border
     border_w = max(2, int(s * 0.018))
-    ImageDraw.Draw(clipped).ellipse(
-        [ex0, ey0, ex1, ey1], outline=(8, 52, 10, 255), width=border_w
-    )
+    ImageDraw.Draw(clipped).ellipse([ex0, ey0, ex1, ey1], outline=(8, 52, 10, 255), width=border_w)
 
     # Upper eyelid arc — darker thicker stroke on the top half only
     lid_d = ImageDraw.Draw(clipped)
     lid_w = max(3, int(s * 0.028))
     lid_d.arc(
-        [ex0 - int(s * 0.004), ey0 - int(s * 0.004),
-         ex1 + int(s * 0.004), ey1 + int(s * 0.004)],
-        start=195, end=345, fill=(5, 28, 7, 230), width=lid_w,
+        [ex0 - int(s * 0.004), ey0 - int(s * 0.004), ex1 + int(s * 0.004), ey1 + int(s * 0.004)],
+        start=195,
+        end=345,
+        fill=(5, 28, 7, 230),
+        width=lid_w,
     )
 
     # Upper eyelash lines — variable length, radiating outward
@@ -165,8 +163,13 @@ def _make_icon(size: int) -> Image.Image:
     lash_w = max(2, int(s * 0.013))
     ld = ImageDraw.Draw(clipped)
     lash_specs = [
-        (218, 0.075), (232, 0.068), (248, 0.078),
-        (265, 0.072), (282, 0.078), (298, 0.068), (312, 0.072),
+        (218, 0.075),
+        (232, 0.068),
+        (248, 0.078),
+        (265, 0.072),
+        (282, 0.078),
+        (298, 0.068),
+        (312, 0.072),
     ]
     for angle_deg, lash_frac in lash_specs:
         angle_rad = math.radians(angle_deg)
@@ -187,9 +190,7 @@ def _make_icon(size: int) -> Image.Image:
         outline=(60, 200, 90, 40),
         width=max(2, int(s * 0.014)),
     )
-    inner_glow = inner_glow.filter(
-        ImageFilter.GaussianBlur(radius=max(1, int(s * 0.012)))
-    )
+    inner_glow = inner_glow.filter(ImageFilter.GaussianBlur(radius=max(1, int(s * 0.012))))
     img = Image.alpha_composite(img, inner_glow)
 
     return img.resize((size, size), Image.LANCZOS)
