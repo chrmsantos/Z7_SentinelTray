@@ -780,8 +780,10 @@ class Notifier:
     def _lock_screen_for_security(self) -> None:
         """Lock the user session as part of the user-active security trigger.
 
-        Called by the same trigger that sends the security warning email.
-        Honors ``lock_screen_on_user_active_warning``. The lock attempt is
+        Called as the first action of the security trigger, before the security
+        warning email is sent and before any other loop work, so the lock is
+        executed as fast as possible once the trigger fires. Honors
+        ``lock_screen_on_user_active_warning``. The lock attempt is
         unconditional and never raises; failures are logged as errors.
         """
         if not self.config.lock_screen_on_user_active_warning:
@@ -1076,6 +1078,19 @@ class Notifier:
                         manual_scan_event.clear()
                         LOGGER.info("Manual scan requested", extra={"category": "control"})
                         self._was_paused_by_user_active = True
+                    is_paused_by_user_active = (
+                        not is_manual
+                        and self.config.pause_on_user_active
+                        and get_idle_seconds() < self.config.pause_idle_threshold_seconds
+                    )
+                    if is_paused_by_user_active and not self._was_paused_by_user_active:
+                        # Rising edge of the user-active security trigger. The screen
+                        # lock is the first protective action: it runs before the
+                        # warning email and before any other loop work so the lock
+                        # happens as fast as possible once the trigger is true.
+                        self._was_paused_by_user_active = True
+                        self._lock_screen_for_security()
+                        self._send_user_active_warning()
                     if test_message_event is not None and test_message_event.is_set():
                         test_message_event.clear()
                         LOGGER.info("Test message requested", extra={"category": "control"})
@@ -1097,11 +1112,6 @@ class Notifier:
                             extra={"category": "perf"},
                         )
                         self._next_queue_drain = now + 30
-                    is_paused_by_user_active = (
-                        not is_manual
-                        and self.config.pause_on_user_active
-                        and get_idle_seconds() < self.config.pause_idle_threshold_seconds
-                    )
                     if is_paused_by_user_active:
                         self.status.set_last_scan_result("PAUSADO (usuário ativo)")
                         LOGGER.debug(
@@ -1109,10 +1119,6 @@ class Notifier:
                             self.config.pause_idle_threshold_seconds,
                             extra={"category": "scan"},
                         )
-                        if not self._was_paused_by_user_active:
-                            self._was_paused_by_user_active = True
-                            self._lock_screen_for_security()
-                            self._send_user_active_warning()
                     else:
                         if not is_manual:
                             self._was_paused_by_user_active = False

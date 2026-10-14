@@ -529,3 +529,106 @@ def test_screen_not_locked_when_lock_flag_disabled(
     assert len(sender.sent_messages) == 1
     assert "aviso:" in sender.sent_messages[0]
     assert lock_calls == []
+
+
+def test_screen_lock_occurs_before_warning_email(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The security lock must be attempted before the warning email is sent."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    events: list[str] = []
+
+    class _OrderingSender:
+        def send(self, _message: str) -> None:
+            events.append("send")
+
+    notifier._sender = _OrderingSender()  # type: ignore[assignment]
+
+    # Active, Active, Idle, Active: the warning fires on the last transition.
+    idle_values = [10.0, 10.0, 200.0, 10.0]
+
+    def get_next_idle() -> float:
+        if idle_values:
+            return idle_values.pop(0)
+        return 200.0
+
+    monkeypatch.setattr(app, "get_idle_seconds", get_next_idle)
+
+    def fake_lock_workstation() -> bool:
+        events.append("lock")
+        return True
+
+    monkeypatch.setattr(app, "lock_workstation", fake_lock_workstation)
+
+    stop_event = Event()
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        if telemetry_calls >= 5:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
+
+    notifier.run_loop(stop_event)
+
+    assert events == ["lock", "send"]
+
+
+def test_screen_lock_runs_before_slow_maintenance_work(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The lock must fire before disk/queue maintenance work once the trigger is true."""
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    config = _config()
+    notifier = Notifier(config=config, status=StatusStore())
+
+    events: list[str] = []
+
+    class _OrderingSender:
+        def send(self, _message: str) -> None:
+            events.append("send")
+
+    notifier._sender = _OrderingSender()  # type: ignore[assignment]
+
+    # User is already known active: the trigger fires on the first iteration.
+    monkeypatch.setattr(app, "get_idle_seconds", lambda: 10.0)
+    notifier._was_paused_by_user_active = False
+
+    def fake_lock_workstation() -> bool:
+        events.append("lock")
+        return True
+
+    monkeypatch.setattr(app, "lock_workstation", fake_lock_workstation)
+
+    def fake_ensure_free_disk() -> None:
+        events.append("disk")
+
+    notifier._ensure_free_disk = fake_ensure_free_disk  # type: ignore[method-assign]
+
+    def fake_drain_queues() -> None:
+        events.append("drain")
+
+    notifier._drain_queues = fake_drain_queues  # type: ignore[method-assign]
+    notifier._next_queue_drain = 0.0  # force the queue drain on the first iteration
+
+    stop_event = Event()
+    telemetry_calls = 0
+
+    def fake_update_telemetry() -> None:
+        nonlocal telemetry_calls
+        telemetry_calls += 1
+        if telemetry_calls >= 2:
+            stop_event.set()
+
+    notifier._update_telemetry = fake_update_telemetry  # type: ignore[method-assign]
+    notifier.scan_once = lambda: None  # type: ignore[method-assign]
+
+    notifier.run_loop(stop_event)
+
+    assert events == ["lock", "send", "disk", "drain"]
