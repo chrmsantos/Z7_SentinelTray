@@ -8,7 +8,7 @@ Regras **sempre ativas**. Este documento é a fonte de verdade da arquitetura.
 de aplicativo alvo e envia e-mail quando uma frase configurada aparece.
 Roda como processo de console/`.exe` sem privilégios de administrador.
 
-- **Versão atual:** 6.8.0
+- **Versão atual:** 6.8.1
 - **Python:** ≥ 3.11
 - **Licença:** GPL-3.0-only
 - **Autor:** CMS
@@ -100,7 +100,7 @@ Z7_SentinelTray/
 - `_send_healthcheck()` — envia status por e-mail; respeitando `healthcheck_send_on_error_only`
 - `_handle_error()` — registra erro, envia notificação com cooldown
 - `scan_once()` — executa uma iteração de varredura em todos os monitores
-- Gatilho de segurança por atividade do usuário (`_send_user_active_warning`): trava a tela (`idle_utils.lock_workstation`, controlada por `lock_screen_on_user_active_warning`) e envia o aviso de segurança
+- Gatilho de segurança por atividade do usuário: trava a tela **antes** do envio do aviso (`idle_utils.lock_workstation`, controlada por `lock_screen_on_user_active_warning`), executada o mais rápido possível quando o gatilho dispara (primeira ação da iteração do loop, antes de check de disco, drain de filas e envio de e-mails); em seguida envia o aviso de segurança (`_send_user_active_warning`)
 
 ### `status.py`
 
