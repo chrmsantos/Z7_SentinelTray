@@ -1,4 +1,4 @@
-"""Win32 helpers for user inactivity detection and workstation locking."""
+"""Win32 helpers for user inactivity detection and screen-lock detection."""
 
 from __future__ import annotations
 
@@ -110,21 +110,3 @@ def is_screen_locked() -> bool:
         return bool(result == 0)
     finally:
         user32.CloseDesktop(h_desktop)
-
-
-def lock_workstation() -> bool:
-    """Lock the Windows workstation (equivalent to Win+L).
-
-    Returns True when the lock request succeeded. Returns False on
-    non-Windows platforms or when the Win32 call fails; this helper
-    never raises.
-    """
-    if sys.platform != "win32":
-        return False
-
-    import ctypes
-
-    try:
-        return bool(ctypes.windll.user32.LockWorkStation())
-    except Exception:
-        return False

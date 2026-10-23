@@ -8,7 +8,7 @@ Regras **sempre ativas**. Este documento é a fonte de verdade da arquitetura.
 de aplicativo alvo e envia e-mail quando uma frase configurada aparece.
 Roda como processo de console/`.exe` sem privilégios de administrador.
 
-- **Versão atual:** 6.8.1
+- **Versão atual:** 6.9.0
 - **Python:** ≥ 3.11
 - **Licença:** GPL-3.0-only
 - **Autor:** CMS
@@ -41,7 +41,7 @@ Z7_SentinelTray/
 │   ├── updater.py                 # Mecanismo de atualização automática (auto-update)
 │   ├── status.py                  # StatusStore thread-safe e StatusSnapshot imutável
 │   ├── scan_utils.py              # Filtros de deduplicação, debounce, min_repeat
-│   ├── idle_utils.py              # Detecção de ociosidade e bloqueio de tela
+│   ├── idle_utils.py              # Detecção de ociosidade e de tela bloqueada
 │   ├── dpapi_utils.py             # Criptografia de senha via Windows DPAPI
 │   ├── logging_setup.py           # Setup de logging, sanitização, structured logs
 │   ├── telemetry.py               # Escrita atômica de JSON de telemetria
@@ -72,7 +72,7 @@ Z7_SentinelTray/
 | `updater.py` | Auto-update (botão da interface gráfica) |
 | `status.py` | `StatusStore` thread-safe + `StatusSnapshot` imutável |
 | `scan_utils.py` | Deduplicação, debounce, min_repeat |
-| `idle_utils.py` | Detecção de ociosidade e bloqueio de tela |
+| `idle_utils.py` | Detecção de ociosidade e de tela bloqueada |
 | `dpapi_utils.py` | Criptografia de senha via Windows DPAPI |
 | `logging_setup.py` | Setup de logging, sanitização, structured logs |
 | `telemetry.py` | Escrita atômica de JSON de telemetria |
@@ -100,7 +100,7 @@ Z7_SentinelTray/
 - `_send_healthcheck()` — envia status por e-mail; respeitando `healthcheck_send_on_error_only`
 - `_handle_error()` — registra erro, envia notificação com cooldown
 - `scan_once()` — executa uma iteração de varredura em todos os monitores
-- Gatilho de segurança por atividade do usuário: trava a tela **antes** do envio do aviso (`idle_utils.lock_workstation`, controlada por `lock_screen_on_user_active_warning`), executada o mais rápido possível quando o gatilho dispara (primeira ação da iteração do loop, antes de check de disco, drain de filas e envio de e-mails); em seguida envia o aviso de segurança (`_send_user_active_warning`)
+- Gatilho de segurança por atividade do usuário: envia o aviso de segurança por e-mail (`_send_user_active_warning`) quando o gatilho dispara. O bloqueio automático de tela (Win+L) foi removido.
 
 ### `status.py`
 
@@ -171,12 +171,10 @@ Campos-chave:
 | `error_notification_cooldown_seconds` | int | `300` | Rate-limit de notificações de erro |
 | `pause_on_user_active` | bool | `true` | Pausa scans enquanto usuário está ativo |
 | `pause_idle_threshold_seconds` | int | `180` | Segundos de ociosidade antes de retomar scans |
-| `lock_screen_on_user_active_warning` | bool | `true` | Bloqueia a tela (Win+L) junto com o aviso de segurança |
 
 Padrões definidos em `_DEFAULT_CONFIG_VALUES` (`config.py`):
 `error_notification_cooldown_seconds=300`, `pause_on_user_active=True`,
 `pause_idle_threshold_seconds=180`, `healthcheck_send_on_error_only=True`,
-`lock_screen_on_user_active_warning=True`,
 `send_repeated_matches=True`.
 
 ---

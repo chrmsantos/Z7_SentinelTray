@@ -29,7 +29,7 @@ from .email_sender import (
     QueueingEmailSender,
     build_sender,
 )
-from .idle_utils import end_scan, get_idle_seconds, is_screen_locked, lock_workstation, start_scan
+from .idle_utils import end_scan, get_idle_seconds, is_screen_locked, start_scan
 from .io_utils import read_json_safe
 from .logging_setup import log_context, sanitize_text, scan_context, setup_logging
 from .scan_utils import dedupe_items, filter_debounce, filter_min_repeat
@@ -777,32 +777,6 @@ class Notifier:
             error_message = f"erro: falha ao enviar teste de inicialização: {exc}"
             self._handle_error(error_message)
 
-    def _lock_screen_for_security(self) -> None:
-        """Lock the user session as part of the user-active security trigger.
-
-        Called as the first action of the security trigger, before the security
-        warning email is sent and before any other loop work, so the lock is
-        executed as fast as possible once the trigger fires. Honors
-        ``lock_screen_on_user_active_warning``. The lock attempt is
-        unconditional and never raises; failures are logged as errors.
-        """
-        if not self.config.lock_screen_on_user_active_warning:
-            LOGGER.debug(
-                "Screen lock disabled by config lock_screen_on_user_active_warning",
-                extra={"category": "scan"},
-            )
-            return
-        if lock_workstation():
-            LOGGER.info(
-                "Screen locked after user-active security trigger",
-                extra={"category": "scan"},
-            )
-        else:
-            LOGGER.warning(
-                "Failed to lock workstation after user-active security trigger",
-                extra={"category": "error"},
-            )
-
     def _send_user_active_warning(self) -> None:
         """Send a warning email when monitoring is put on hold due to user activity."""
         message = (
@@ -1084,12 +1058,9 @@ class Notifier:
                         and get_idle_seconds() < self.config.pause_idle_threshold_seconds
                     )
                     if is_paused_by_user_active and not self._was_paused_by_user_active:
-                        # Rising edge of the user-active security trigger. The screen
-                        # lock is the first protective action: it runs before the
-                        # warning email and before any other loop work so the lock
-                        # happens as fast as possible once the trigger is true.
+                        # Rising edge of the user-active trigger: send the security
+                        # warning email exactly once per transition.
                         self._was_paused_by_user_active = True
-                        self._lock_screen_for_security()
                         self._send_user_active_warning()
                     if test_message_event is not None and test_message_event.is_set():
                         test_message_event.clear()

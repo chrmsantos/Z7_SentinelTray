@@ -240,8 +240,3 @@ pause_on_user_active: true
 # por pelo menos esse período.
 # Exemplo: 120 = 2 minutos sem atividade de teclado/mouse para retomar alertas.
 pause_idle_threshold_seconds: 120
-
-# Quando true, o gatilho de segurança por atividade do usuário também bloqueia
-# a tela do Windows (Win+L) ao enviar o aviso de segurança por e-mail.
-# Quando false, apenas o aviso é enviado, sem bloquear a tela.
-lock_screen_on_user_active_warning: true
