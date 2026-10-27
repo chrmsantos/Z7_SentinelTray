@@ -32,6 +32,7 @@ Examples:
 Notes:
 
 - window_title_regex uses regex search (partial match by default). Use ^...$ if you need an exact match.
+- window_title_regex and phrase_regex matching ignore case and accent differences.
 
 ## Multiple monitors
 

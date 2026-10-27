@@ -49,7 +49,9 @@ class WindowTextDetector:
         allow_window_restore: bool = True,
         log_throttle_seconds: int = 60,
     ) -> None:
-        self._window_title_regex = re.compile(window_title_regex)
+        self._window_title_pattern = re.compile(
+            self._normalize_text(window_title_regex), re.IGNORECASE
+        )
         self._allow_window_restore = allow_window_restore
         self._last_window: object | None = None
         self._log_throttle_seconds = max(0, log_throttle_seconds)
@@ -72,7 +74,91 @@ class WindowTextDetector:
             self._last_log[key] = now
             LOGGER.log(level, message, *args, extra={"category": "scan"})
 
+    @staticmethod
+    def _window_handle(window: object) -> int | None:
+        """Return the Win32 handle of *window* when available."""
+        try:
+            if hasattr(window, "handle"):
+                handle = window.handle
+                if handle:
+                    return int(handle)
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _win32_get_window_text(handle: int) -> str:
+        """Read the cached Win32 caption of *handle*.
+
+        ``GetWindowTextW`` returns the caption cached by the OS for windows
+        owned by other processes, so it keeps working while the target UI
+        thread is busy or hung (unlike ``WM_GETTEXT``-based reads).
+        """
+        try:
+            user32 = ctypes.windll.user32
+            length = user32.GetWindowTextLengthW(handle)
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(handle, buf, length + 1)
+        except Exception:
+            return ""
+        else:
+            return buf.value
+
+    @staticmethod
+    def _win32_is_window_visible(handle: int) -> bool | None:
+        """Return the ``WS_VISIBLE`` state of *handle*, or ``None`` if unknown.
+
+        ``IsWindowVisible`` stays True for visible, minimized and cloaked
+        windows and never depends on the target UI thread being responsive.
+        """
+        try:
+            return bool(ctypes.windll.user32.IsWindowVisible(handle))
+        except Exception:
+            return None
+
+    def _read_window_title(self, window: object) -> str:
+        """Return the title of *window*, tolerating busy or hung target apps."""
+        try:
+            if hasattr(window, "window_text"):
+                title_text = window.window_text()
+                if title_text:
+                    return str(title_text)
+        except Exception:
+            LOGGER.debug("Failed to read window title via automation API", exc_info=True)
+        handle = self._window_handle(window)
+        if handle is not None:
+            return self._win32_get_window_text(handle)
+        return ""
+
+    def _title_matches(self, title_text: str) -> bool:
+        """Return True when *title_text* matches the configured title regex.
+
+        Matching ignores case and accent differences, mirroring phrase matching.
+        """
+        return bool(self._window_title_pattern.search(self._normalize_text(title_text)))
+
+    def _is_candidate_window(self, window: object) -> bool:
+        """Return True when *window* is a monitorable top-level window."""
+        handle = self._window_handle(window)
+        if handle is not None:
+            visible = self._win32_is_window_visible(handle)
+            if visible is not None:
+                return visible
+        try:
+            if self._window_is_minimized(window):
+                return True
+            if hasattr(window, "is_visible"):
+                return bool(window.is_visible())
+        except Exception:
+            LOGGER.debug("Failed to evaluate window visibility", exc_info=True)
+        return True
+
     def _window_exists(self, window: object, timeout: float = 0.0) -> bool:
+        handle = self._window_handle(window)
+        # Win32 handle checks never depend on the target UI thread being
+        # responsive, unlike UIA property queries on busy windows.
+        if handle is not None and self._win32_is_window_visible(handle):
+            return True
         try:
             if hasattr(window, "exists") and window.exists(timeout=timeout):
                 return True
@@ -306,16 +392,31 @@ class WindowTextDetector:
                 "pywinauto is required for window detection. "
                 "Install dependencies from requirements.txt."
             ) from _PYWINAUTO_IMPORT_ERROR
-        desktop = Desktop(backend="uia")
-        candidates: list[object] = []
-        for window in desktop.windows():
+        for backend in ("uia", "win32"):
             try:
-                title_text = window.window_text()
-            except Exception:
+                candidates = self._collect_candidates_from_backend(backend)
+            except Exception as exc:
+                self._log_throttled(
+                    logging.WARNING,
+                    f"window_enum_failed_{backend}",
+                    "Window enumeration via %s backend failed: %s",
+                    backend,
+                    exc,
+                )
                 continue
+            if candidates:
+                return candidates
+        return []
+
+    def _collect_candidates_from_backend(self, backend: str) -> list[object]:
+        """Return title-matching top-level windows found by *backend*."""
+        desktop = Desktop(backend=backend)
+        candidates: list[object] = []
+        for window in desktop.windows(visible_only=False):
+            title_text = self._read_window_title(window)
             if not title_text:
                 continue
-            if self._window_title_regex.search(title_text):
+            if self._title_matches(title_text) and self._is_candidate_window(window):
                 candidates.append(window)
         return candidates
 
@@ -326,14 +427,9 @@ class WindowTextDetector:
                 "Install dependencies from requirements.txt."
             ) from _PYWINAUTO_IMPORT_ERROR
         if self._last_window is not None:
-            try:
-                if hasattr(self._last_window, "exists"):
-                    if self._last_window.exists(timeout=0.5):
-                        return self._last_window
-                else:
-                    return self._last_window
-            except Exception:
-                self._last_window = None
+            if self._window_exists(self._last_window, timeout=0.5):
+                return self._last_window
+            self._last_window = None
         last_exc: Exception | None = None
         for attempt in range(3):
             try:
@@ -366,12 +462,7 @@ class WindowTextDetector:
         candidates = self._collect_candidate_windows()
         titles: list[str] = []
         for window in candidates:
-            try:
-                if not hasattr(window, "window_text"):
-                    continue
-                title_text = window.window_text()
-            except Exception:
-                continue
+            title_text = self._read_window_title(window)
             if title_text:
                 titles.append(title_text)
         return titles
@@ -383,6 +474,45 @@ class WindowTextDetector:
             raise WindowUnavailableError("Target window not found")
         self._ensure_foreground_and_maximized(window)
 
+    def _win32_descendants(self, window: object, cause: Exception) -> list[object]:
+        """Read descendant elements through the win32 backend as a fallback.
+
+        Used when the UIA read fails because the target UI thread is busy.
+        """
+        handle = self._window_handle(window)
+        if handle is not None and Desktop is not None:
+            try:
+                win32_window = Desktop(backend="win32").window(handle=handle).wrapper_object()
+                descendants: list[object] = list(win32_window.descendants())
+            except Exception as exc:
+                LOGGER.debug("Win32 descendant fallback failed", exc_info=True)
+                raise RuntimeError("Failed to read window texts") from exc
+            return descendants
+        raise RuntimeError("Failed to read window texts") from cause
+
+    def _read_window_texts(self, window: object) -> list[str]:
+        """Read the title and descendant texts of *window*."""
+        texts: list[str] = []
+        title_text = self._read_window_title(window)
+        if title_text:
+            texts.append(title_text)
+        try:
+            descendants: list[object] = (
+                window.descendants() if hasattr(window, "descendants") else []
+            )
+        except Exception as exc:
+            descendants = self._win32_descendants(window, exc)
+        for element in descendants:
+            try:
+                if not hasattr(element, "window_text"):
+                    continue
+                text = element.window_text()
+            except Exception:
+                continue
+            if text:
+                texts.append(str(text))
+        return texts
+
     def _iter_texts(self) -> list[str]:
         window = self._get_window()
         if not self._window_exists(window, timeout=1.0):
@@ -392,24 +522,7 @@ class WindowTextDetector:
         texts: list[str] = []
         try:
             self._ensure_foreground_and_maximized(window)
-            try:
-                try:
-                    if hasattr(window, "window_text"):
-                        title_text = window.window_text()
-                        if title_text:
-                            texts.append(title_text)
-                except Exception:
-                    LOGGER.debug("Failed to read window title text", exc_info=True)
-                descendants = window.descendants() if hasattr(window, "descendants") else []
-                for element in descendants:
-                    try:
-                        text = element.window_text()
-                    except Exception:
-                        continue
-                    if text:
-                        texts.append(text)
-            except Exception as exc:
-                raise RuntimeError("Failed to read window texts") from exc
+            texts = self._read_window_texts(window)
         finally:
             # Non-intrusive: restore the original window state and active focus
             # so the user's workflow is not disrupted by the scan.

@@ -8,7 +8,7 @@ Regras **sempre ativas**. Este documento é a fonte de verdade da arquitetura.
 de aplicativo alvo e envia e-mail quando uma frase configurada aparece.
 Roda como processo de console/`.exe` sem privilégios de administrador.
 
-- **Versão atual:** 6.9.1
+- **Versão atual:** 6.9.2
 - **Python:** ≥ 3.11
 - **Licença:** GPL-3.0-only
 - **Autor:** CMS

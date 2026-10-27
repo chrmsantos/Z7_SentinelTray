@@ -44,5 +44,5 @@ Regras **sempre ativas**. Aplicam-se a qualquer tarefa neste repositório.
 
 ## Versionamento
 
-- Versão atual: **6.9.1** (verifique `pyproject.toml` antes de alterar).
+- Versão atual: **6.9.2** (verifique `pyproject.toml` antes de alterar).
 - Toda mudança de versão deve ser consistente (ver skill `version-bump`).

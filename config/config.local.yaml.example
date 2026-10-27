@@ -11,6 +11,7 @@ monitors:
 - # Expressão regular (regex) comparada contra o título da janela do processo.
   # Use '\\.' para escapar pontos literais no nome do executável.
   # Exemplo: 'MinhaApp\\.exe' corresponde a "MinhaApp.exe".
+  # A comparação não diferencia maiúsculas/minúsculas nem acentos.
   window_title_regex: 'Sino\.Siscam'
 
   # Expressão regular (regex) comparada contra o texto visível dentro da janela.
